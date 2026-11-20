@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RSL 島嶼維護工具</title>
+<!-- 讀 islands_data.js，編輯後存回 islands_data.js。預覽直接用 index.html 的 3D 程式即時畫出（?preview=建築類型）。
+     請跟 index.html、islands_data.js、vendor 資料夾放在同一層，直接雙擊開檔即可（不需要伺服器）。 -->
+<script src="islands_data.js" onerror="void 0"></script>
+<script src="logo_data.js" onerror="void 0"></script>
+<script src="manifest.js"></script>
+<script>
+// 載入 shapes\（建築）與 characters\（島上人物）底下的檔案（只讀它們登記的名稱與說明，這裡不會畫 3D；預覽用的是 index.html）
+window.ISLAND_SHAPES = {}; window.ISLAND_CHARACTERS = {};
+ISLAND_SCRIPTS.filter(function (f) { return f.indexOf('shapes/') === 0 || f.indexOf('characters/') === 0; }).forEach(function (f) { document.write('<script src="' + f + '"><\/script>'); });
+</script>
+<style>
+  :root { --ink:#222; --sub:#777; --mint:#9fd2b6; --mint-light:#b3e6ca; --mint-ink:#17382a; --accent:#3d8566; --accent-dk:#2f6b50; --line:#ddd; --soft:#f7f7f7; --bad:#c0392b; --ok:#2e7d32; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Noto Sans CJK TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; color:var(--ink); background:#fff; }
+  header { background:var(--mint); color:var(--mint-ink); padding:10px 20px; display:flex; align-items:center; gap:16px; }
+  header h1 { margin:0; font-size:17px; font-weight:500; letter-spacing:2px; }
+  header .st { margin-left:auto; font-size:13px; }
+  main { display:flex; gap:16px; padding:16px 20px; align-items:flex-start; }
+  #left { flex:1; min-width:0; }
+  #right { width:460px; position:sticky; top:12px; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; align-items:center; }
+  button { font-family:inherit; font-size:13px; padding:7px 14px; border:1px solid var(--accent); background:#fff; color:var(--accent); cursor:pointer; }
+  button:hover { background:#e8f5ee; }
+  button.pri { background:var(--mint); color:var(--mint-ink); border-color:var(--accent); }
+  button.pri:hover { background:var(--mint-light); }
+  button.sm { padding:3px 8px; font-size:12px; }
+  button:disabled { opacity:.35; cursor:default; }
+  table { border-collapse:collapse; width:100%; }
+  th { text-align:left; font-weight:500; font-size:12px; color:var(--sub); padding:6px 6px; border-bottom:2px solid var(--line); white-space:nowrap; }
+  td { padding:5px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tr.sel td { background:#eaf7f0; }
+  tr.sel td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+  td.no { font-family:Georgia,serif; color:var(--accent); font-size:18px; width:36px; cursor:pointer; }
+  input[type=text] { width:100%; padding:6px 8px; border:1px solid #ccc; font-size:13px; font-family:inherit; }
+  input[type=text]:focus { outline:none; border-color:var(--accent); }
+  input.bad { border-color:var(--bad); background:#fdf0ee; }
+  input[type=color] { width:38px; height:30px; padding:0; border:1px solid #ccc; background:#fff; }
+  .shapebtn { width:100%; text-align:left; display:flex; justify-content:space-between; gap:6px; border-color:#ccc; color:var(--ink); }
+  .shapebtn small { color:var(--sub); }
+  .acts { white-space:nowrap; }
+  #msg { margin:10px 0; font-size:13px; line-height:1.7; }
+  #msg .e { color:var(--bad); } #msg .w { color:#a76b00; } #msg .o { color:var(--ok); }
+  .note { font-size:12px; color:var(--sub); line-height:1.8; border-left:3px solid var(--accent); padding:6px 12px; background:var(--soft); margin-top:12px; }
+  #pvbox { border:1px solid var(--line); background:#9ad6e6; height:380px; position:relative; }
+  #pvbox iframe { width:100%; height:100%; border:0; display:block; }
+  #pvcap { font-size:13px; margin:8px 0 2px; }
+  #pvhint { font-size:12px; color:var(--sub); }
+  /* 選 shape 的彈出清單 */
+  #pop { position:fixed; z-index:20; background:#fff; border:1px solid #bbb; box-shadow:0 6px 20px #0003; padding:8px; display:none; width:360px; max-height:70vh; overflow:auto; }
+  #pop .opt { display:flex; gap:10px; align-items:center; padding:6px 8px; cursor:pointer; border:1px solid transparent; }
+  #pop .opt:hover, #pop .opt.cur { background:#eaf7f0; border-color:var(--accent); }
+  #pop .opt img { width:84px; height:67px; object-fit:cover; border:1px solid var(--line); background:#9ad6e6; }
+  #pop .opt b { font-weight:500; } #pop .opt small { display:block; color:var(--sub); }
+  .chip { display:inline-block; font-size:12px; background:var(--soft); border:1px solid var(--line); padding:1px 7px; margin:0 4px 4px 0; white-space:nowrap; }
+  .chip.none { color:#a76b00; background:#fff7e6; border-color:#f0d9a8; }
+  #cn { position:fixed; inset:0; background:#0006; z-index:30; display:none; align-items:center; justify-content:center; }
+  #cn .box { background:#fff; width:760px; max-width:96vw; max-height:94vh; overflow:auto; padding:18px 22px; box-shadow:0 8px 30px #0005; }
+  #cn h3 { margin:0 0 6px; font-size:16px; font-weight:500; }
+  #cn p { margin:0 0 8px; font-size:12px; color:var(--sub); line-height:1.7; }
+  #cnNew { background:#fff7e6; border-left:3px solid #e0a040; padding:6px 10px; color:#7a5200; }
+  #cnSvg { width:100%; height:min(60vh, 560px); background:#e6f4f8; border:1px solid var(--line); display:block; touch-action:none; }
+  .cnpos { margin:8px 0 0; font-size:13px; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; }
+  .cnpos input[type=number] { width:80px; padding:4px 6px; border:1px solid #ccc; font-size:13px; }
+  .cnpos select { padding:4px; font-size:13px; }
+  #cnWarn { color:#a76b00; }
+  #cnList { display:flex; flex-wrap:wrap; gap:4px 18px; margin:10px 0 14px; font-size:13px; }
+  #cnList small { color:var(--sub); }
+  #em { position:fixed; inset:0; z-index:25; background:#fff; display:none; flex-direction:column; }
+  #em .hd { background:var(--mint); color:var(--mint-ink); padding:10px 20px; display:flex; align-items:center; gap:16px; }
+  #em .hd h2 { margin:0; font-size:17px; font-weight:500; letter-spacing:2px; }
+  #em .hd .tip { font-size:12px; margin-left:4px; } #em .hd #emFit { margin-left:auto; } #em .hd #emOk { margin-left:8px; }
+  #em .bd { flex:1; display:flex; min-height:0; }
+  #emSvg { flex:1; min-width:0; height:100%; background:#e6f4f8; display:block; touch-action:none; cursor:grab; }
+  #emSide { width:360px; display:flex; flex-direction:column; border-left:1px solid var(--line); font-size:13px; line-height:1.7; }
+  #emSideBody { flex:1; min-height:0; overflow:auto; padding:14px 16px; }
+  #em3d { height:280px; flex:none; border-top:1px solid var(--line); background:#9ad6e6; position:relative; }
+  #em3d iframe { width:100%; height:100%; border:0; display:block; } #em3d .cap { position:absolute; left:8px; top:6px; font-size:11px; background:#fffc; padding:1px 8px; pointer-events:none; }
+  #emSide .row { margin:8px 0; display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center; }
+  #emSide input[type=number] { width:78px; padding:4px 6px; border:1px solid #ccc; font-size:13px; }
+  #emSide select { padding:4px; font-size:13px; } #emSide .sub { font-size:12px; color:var(--sub); margin:6px 0; }
+  #emSide hr { border:0; border-top:1px solid var(--line); margin:12px 0; }
+  #emWarn { color:#a76b00; font-size:12px; }
+  #emList .li { padding:4px 8px; cursor:pointer; border-left:3px solid transparent; } #emList .li:hover { background:#eaf7f0; }
+  #emList .li.cur { background:#eaf7f0; border-left-color:var(--accent); } #emList small { color:var(--sub); }
+  #imp { position:fixed; inset:0; background:#0006; z-index:35; display:none; align-items:center; justify-content:center; }
+  #imp .box { background:#fff; width:860px; max-width:96vw; max-height:92vh; overflow:auto; padding:18px 22px; box-shadow:0 8px 30px #0005; }
+  #imp h3 { margin:0 0 6px; font-size:16px; font-weight:500; } #imp .sub { font-size:12px; color:var(--sub); line-height:1.7; margin:6px 0; }
+  #imp .row { margin:12px 0 4px; display:flex; flex-wrap:wrap; gap:8px; }
+  .imptb td { vertical-align:top; font-size:13px; line-height:1.6; } .imptb small { color:var(--sub); }
+  #impList .e, #impMsg .e { color:var(--bad); } #impList .w { color:#a76b00; } #impList .o, #impMsg .o { color:var(--ok); }
+  #emChars .chrow { border:1px solid var(--line); background:var(--soft); padding:6px 8px; margin:6px 0; font-size:12px; line-height:2; }
+  #emChars input[type=number] { width:56px; } #emChars select { max-width:190px; }
+  #lg { position:fixed; inset:0; background:#0006; z-index:36; display:none; align-items:center; justify-content:center; }
+  #lg .box { background:#fff; width:420px; max-width:96vw; padding:16px 20px; box-shadow:0 8px 30px #0005; }
+  #lg h3 { margin:0 0 10px; font-size:16px; font-weight:500; } #lg .sub { font-size:12px; color:var(--sub); line-height:1.7; margin:8px 0; }
+  #th { position:fixed; inset:0; background:#0006; z-index:35; display:none; align-items:center; justify-content:center; }
+  #th .box { background:#fff; width:760px; max-width:96vw; max-height:94vh; overflow:auto; padding:18px 22px; box-shadow:0 8px 30px #0005; }
+  #th h3 { margin:0 0 10px; font-size:16px; font-weight:500; } #th .sub { font-size:12px; color:var(--sub); line-height:1.7; margin:8px 0; }
+  .thgrid { display:grid; grid-template-columns:1fr 1fr; gap:10px 18px; font-size:13px; }
+  .thgrid label { display:flex; flex-direction:column; gap:4px; } .thgrid small { color:var(--sub); font-size:11px; }
+  .thgrid input[type=text], .thgrid select { padding:6px 8px; border:1px solid #ccc; font-size:13px; font-family:inherit; width:100%; }
+  .thgrid input[type=color] { width:56px; height:32px; padding:0; border:1px solid #ccc; background:#fff; }
+  .thprev { position:relative; height:250px; margin-top:10px; background:linear-gradient(#8ccdf0,#4fc3d6 60%,#6fe6d2); border:1px solid var(--line); overflow:hidden; }
+  .thprev .pbar { position:absolute; left:0; right:0; top:0; height:18px; }
+  .thprev .ptitle { position:absolute; left:0; top:18px; background:#fff; padding:10px 26px 10px 18px; box-shadow:0 2px 10px #0002; }
+  .thprev .ptitle h1 { margin:0; font-size:22px; font-weight:500; letter-spacing:4px; } .thprev .ptitle p { margin:6px 0 0; font-size:11px; letter-spacing:2px; }
+  .thprev .pbtn { position:absolute; right:8px; top:30px; padding:7px 16px; border:1px solid; border-radius:0; font-size:13px; font-family:inherit; cursor:default; }
+  .thprev .pzoom { position:absolute; right:56px; top:74px; display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .thprev .pzoom button { width:28px; height:28px; padding:0; border:1px solid; background:#ffffffe6; font-size:16px; line-height:1; border-radius:0; cursor:default; }
+  .thprev .ptrack { position:relative; width:28px; height:110px; } .thprev .ptrack::before { content:""; position:absolute; left:12px; top:0; bottom:0; width:4px; background:#ffffffcc; border:1px solid var(--tc, #af272f); box-sizing:border-box; }
+  .thprev .pthumb { position:absolute; left:2px; top:60px; width:24px; height:13px; border:2px solid #fff; box-sizing:border-box; box-shadow:0 1px 4px #0005; }
+  .thprev .plabel { position:absolute; left:40%; top:130px; display:flex; align-items:stretch; background:#fff; box-shadow:0 2px 8px #0003; font-size:15px; }
+  .thprev .plabel span { padding:8px 12px; font-family:Georgia,serif; } .thprev .plabel b { padding:8px 14px; font-weight:500; color:#222; }
+  #csBox { margin-top:12px; border:1px solid var(--line); border-left:3px solid var(--accent); padding:10px 12px; font-size:13px; line-height:1.7; background:var(--soft); }
+  #csBox .row { margin:8px 0; display:flex; gap:8px; flex-wrap:wrap; } #csBox .sub { font-size:12px; color:var(--sub); }
+  @media (max-width:1100px) { main { flex-direction:column; } #right { width:100%; position:static; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>RSL 島嶼維護工具</h1>
+  <span class="st" id="dirty"></span>
+</header>
+<main>
+  <section id="left">
+    <div class="bar">
+      <button class="pri" id="bSave">儲存到檔案</button>
+      <button id="bDown">下載 islands_data.js</button>
+      <button class="pri" id="bEdit">編輯模式</button>
+      <button id="bTheme">網頁外觀</button>
+      <button id="bLogo">商場 LOGO</button>
+      <button id="bOpen">開啟完整畫面</button>
+      <!-- 已從上方按鍵拿掉的功能（複製內容、載入檔案、載入／匯入建築與人物 js）：程式還在，先藏起來，需要時可以再放回別的位置 -->
+      <span id="hiddenBtns" style="display:none"><button id="bCopy">複製內容</button><button id="bLoad">載入檔案…</button><button id="bModel">載入建築／人物 js 預覽…</button><button id="bImport">匯入建築／人物 js…</button></span>
+      <input type="file" id="modelIn" accept=".js" hidden>
+      <input type="file" id="impIn" accept=".js" multiple hidden>
+      <input type="file" id="fileIn" accept=".js,.json,.txt" hidden>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>id（英文代號）</th><th>title（標籤名稱）</th><th>desc（說明）</th><th>pages（頁面）</th><th>顏色</th><th>shape（建築）</th><th>相連的橋</th><th>島上人物</th><th></th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    <div id="msg"></div>
+    <div class="note">
+      · 第 1 列是中央主島，其餘依序放在四周；順序就是畫面上的編號。<br>
+      · 新增、刪除島嶼，以及島的位置、相連的橋，都在「進入島編輯模式」的鳥瞰圖裡操作；順序（↑↓）仍在表格調整，第 6 列的島外面會掛燈塔與泳池小島，調整順序會連帶改變位置。<br>
+      · title 留空就不顯示這座島的標籤（副島用這個）；desc、pages 目前畫面沒用到，先保留欄位；網址加上 #id（例如 index.html#cinema）可以直接飛到該島。<br>
+      · 儲存後 index.html 重新整理才會看到變化；正式發布要把存好的 islands_data.js 也放進 ISLAND 資料夾。
+    </div>
+  </section>
+  <aside id="right">
+    <div id="pvbox"><iframe id="pv" title="預覽"></iframe></div>
+    <div id="pvcap"></div>
+    <div id="pvhint">預覽直接用 index.html 的 3D 畫出；滑鼠移到 shape 選項上也會即時換成該建築。可以拖曳旋轉、滾輪縮放。</div>
+    <div id="csBox" style="display:none">
+      <b>預覽載入的檔案（建築或人物）</b>
+      <div id="csInfo"></div>
+      <div class="row"><button class="sm" id="csAgain">用選中島的顏色重新預覽</button> <button class="sm" id="csClear">清除，回到一般預覽</button> <button class="sm" id="csImport">匯入到專案…</button></div>
+      <div class="sub">只是預覽：不會加進資料或專案。檔案格式跟 shapes\*.js 一樣；用到的島色是表格目前選中那一列的顏色。</div>
+    </div>
+  </aside>
+</main>
+<div id="cn">
+  <div class="box">
+    <h3 id="cnTitle"></h3>
+    <p>點圖上的島，或勾選下面的清單，就會用木橋相連（再點一次取消）；兩邊會一起設定。圖上是目前的位置，淡色大圓是島的實際大小，虛線小圓是旁邊掛的小島。</p>
+    <svg id="cnSvg" viewBox="-125 -147 690 690"></svg>
+    <div id="cnList"></div>
+    <div style="text-align:right"><button class="pri" id="cnOk">完成</button></div>
+  </div>
+</div>
+<div id="em">
+  <div class="hd"><h2>島編輯模式（鳥瞰圖）</h2><span class="tip">上方是遠處、下方是鏡頭這一側；點島選取，拖動島直接移動位置；滾輪縮放、按住滑鼠中鍵拖動畫布（空白處按左鍵拖動也可以）</span><button class="sm" id="emFit">重設視圖</button><button class="pri" id="emOk">完成</button></div>
+  <div class="bd">
+    <svg id="emSvg" viewBox="-125 -147 690 690"></svg>
+    <div id="emSide"><div id="emSideBody">
+      <div id="emInfo"></div>
+      <p id="emFix" style="display:none" class="sub">中央主島固定在 0, 0，不能移動也不能刪除；但可以設定它的橋。</p>
+      <div class="row">位置　X <input type="number" id="emX" step="0.5"> Z <input type="number" id="emZ" step="0.5"></div>
+      <div class="row">大小　<input type="range" id="emScale" min="0.3" max="3" step="0.05" style="width:120px"> <input type="number" id="emScaleN" min="0.3" max="3" step="0.05" style="width:64px"> 倍 <button class="sm" id="emScaleReset">回到 1 倍</button></div>
+      <div class="row">外形　<button class="pri" id="emReroll">換個樣子</button> seed <input type="number" id="emSeed" step="1" min="0" style="width:80px"> <button class="sm" id="emSeedFix">固定</button> <button class="sm" id="emSeedAuto">改回自動</button><div id="emSeedNote" class="sub" style="width:100%"></div></div>
+      <div class="row">吸附 <select id="emSnap"><option value="1" selected>1 格</option><option value="0.5">0.5 格</option><option value="2">2 格</option><option value="0">不吸附</option></select>
+        <button class="sm" id="emReset">重設為預設位置</button></div>
+      <div id="emWarn"></div>
+      <div class="row"><button class="pri" id="emConn">設定連接…</button> <button id="emDel">刪除這座島</button></div>
+      <hr>
+      <div><b>島上人物</b></div>
+      <div id="emChars"></div>
+      <div class="row"><button class="sm" id="emCharAdd">＋ 新增人物</button></div>
+      <p class="sub">人物位置相對於建築（+z 是建築正面），地圖上用深色小圓點標示；選取這座島後可以用滑鼠拖動小圓點。</p>
+      <hr>
+      <div class="row"><button class="pri" id="emAdd">＋ 新增島嶼</button></div>
+      <p class="sub">新增的島預設沒有橋，位置先放在外圍空的地方；拖到想要的位置後，選取它再按「設定連接…」選擇怎麼跟其他島相連。</p>
+      <div id="emList"></div>
+    </div>
+    <div id="em3d"><iframe id="emPv" title="3D 預覽"></iframe><div class="cap" id="em3dCap"></div></div>
+    </div>
+  </div>
+</div>
+<div id="imp">
+  <div class="box">
+    <h3>匯入建築／人物 js 到專案</h3>
+    <p class="sub">選好檔案後會先檢查格式（可以一次選好幾個）。沒有錯誤的可以匯入：建築會寫進你選的專案資料夾的 shapes\、人物寫進 characters\，並加進 manifest.js，匯入後就會出現在對應的選單。有錯誤的檔案不能匯入；格式規範見 docs\模型規範.md。</p>
+    <div id="impList"></div>
+    <div class="row"><button id="impAdd">加入檔案…</button> <button class="pri" id="impGo">選擇專案資料夾並匯入…</button> <button id="impClose">關閉</button></div>
+    <div id="impMsg"></div>
+  </div>
+</div>
+<div id="lg">
+  <div class="box">
+    <h3>商場 LOGO</h3>
+    <div class="row"><img id="thLogoImg" alt="" style="display:none;height:64px;border:1px solid var(--line);background:#fff"></div>
+    <div class="row" style="margin-top:8px"><button class="sm" id="thLogoPick">1. 選擇圖片</button> <button class="sm" id="thLogoPut" disabled>2. 生成LOGO資料</button> <input type="file" id="thLogoIn" accept="image/png" hidden></div>
+    <p class="sub" id="thLogoNote"></p>
+    <div class="row" style="margin-top:8px"><button class="pri" id="lgOk">關閉</button></div>
+  </div>
+</div>
+<div id="th">
+  <div class="box">
+    <h3>網頁外觀設定（左上角文字、字型、顏色與配色）</h3>
+    <div class="thgrid">
+      <label>左上角標題<input type="text" id="thTitle" placeholder="留空就不顯示"></label>
+      <label>副標題<input type="text" id="thSub" placeholder="留空就不顯示"></label>
+      <label>字型<span><select id="thFontSel"></select> <input type="text" id="thFont" placeholder="字型名稱，可用逗號列多個，例如 DFKai-SB,BiauKai" style="display:none"></span></label>
+      <label>標題顏色<input type="color" id="thTitleC"></label>
+      <label>副標題顏色<input type="color" id="thSubC"></label>
+      <label>主配色<span><input type="color" id="thPrimary"> <small id="thPrimaryHex"></small><br><small>「全部小島」按鈕、縮放條（軌道與滑塊）、頂端橫條</small></span></label>
+      <label>副配色<span><input type="color" id="thSecondary"> <small id="thSecondaryHex"></small><br><small>縮放條的＋－按鈕、島嶼標籤的編號徽章</small></span></label>
+    </div>
+    <p class="sub">字型要在「顯示網頁的那台機器」上有安裝才會生效，沒有就自動退回預設字型（POS 是 Ubuntu，字型清單跟 Windows 不同）。按鈕與徽章上的文字會依底色深淺自動用白字或深字。設定跟島嶼資料一起存在 islands_data.js，記得存檔。</p>
+    <div class="thprev" id="thPrev">
+      <div class="pbar" id="pBar"></div>
+      <div class="ptitle" id="pTitle"><h1 id="pH1"></h1><p id="pP"></p></div>
+      <button class="pbtn" id="pReset">全部小島</button>
+      <div class="pzoom"><button id="pPlus">＋</button><div class="ptrack" id="pTrack"><div class="pthumb" id="pThumb"></div></div><button id="pMinus">－</button></div>
+      <div class="plabel"><span id="pBadge">01</span><b>福華大飯店</b></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="thReset">還原預設</button> <button class="pri" id="thOk">完成</button></div>
+  </div>
+</div>
+<div id="pop"></div>
+
+<script>
+// ---------- 建築類型：讀 shapes\*.js 登記的名稱與說明（新增建築檔案、加進 manifest.js 後，選單會自動多一項）----------
+const SHAPES = Object.entries(window.ISLAND_SHAPES).map(([key, s]) => [key, s.label || key, s.desc || '']);
+const SHAPE_LABEL = Object.fromEntries(SHAPES.map(s => [s[0], s[1]]));
+// ---------- 島上人物：讀 characters\*.js 登記的名稱與說明 ----------
+const CHARS = Object.entries(window.ISLAND_CHARACTERS).map(([key, s]) => [key, s.label || key, s.desc || '']);
+const CHAR_LABEL = Object.fromEntries(CHARS.map(s => [s[0], s[1]]));
+const HEADER = `// 島嶼資料：直接改這個檔案即可（不需要任何轉換步驟，也可以用 maintain_tool.html 編輯）
+// id      ：英文代號，網址帶 #id 可直接飛到該島（例如 index.html#cinema）
+// title   ：島上標籤顯示的名稱
+// desc    ：說明文字（目前畫面沒用到，先保留）
+// link    ：跳轉頁面（目前畫面沒用到，先保留）
+// color   ：島的主題色
+// shape   ：島上的建築，必須是 index.html 的 mainBuilding() 有的類型：
+//           mall 商場 / reception 服務台 / toy 玩具店 / server 伺服器機櫃 / pavilion 涼亭 /
+//           cinema 電影院 / crystal 小屋加水晶 / fashion 服飾店 / tower 燈塔 / house 小鎮
+// x, z    ：島中心在平面圖上的位置（場景單位；中央主島固定在 0, 0，x 往右、z 往下，一座島的半徑約 5）；沒填就用內建的預設位置
+// bridges ：用木橋相連的島（填對方的 id；兩邊都列，互相對稱，只會蓋一座橋）
+// characters：這座島上的人物，每個 { "type": 人物名稱, "x", "y", "z": 相對於建築的位置（+z 是建築正面）, "ry": 面向角度（度） }；人物種類見 characters\*.js
+// scale   ：這座島整體的放大縮小倍率（選填，預設 1；島、建築、樹、人物一起縮放）
+// seed    ：選填；島形與植物散布的亂數種子。沒填就依這座島在清單裡的順序自動算（調整順序外形會變）；填了就固定，不受順序影響
+// title 留空：不顯示這座島的標籤（編號與名稱都不顯示；副島預設這樣）
+// 檔案最後的 window.ISLAND_THEME：網頁外觀（維護工具的「網頁外觀」設定）。title／subtitle 左上角標題與副標題文字（留空就隱藏）、font 字型（空白＝預設；顯示網頁的機器要有安裝這個字型才會生效）、titleColor／subtitleColor 文字顏色、primary 主配色（「全部小島」按鈕、縮放條、頂端橫條）、secondary 副配色（縮放條的＋－按鈕、島嶼標籤的編號徽章）
+// 順序即編號：第 1 個是中央主島，其餘依序放在四周
+`;
+
+// 每一列有一個不會變的內部編號 _u，橋（nb）記的是對方的 _u；這樣改 id 或調順序時，橋的連線不會亂掉。存檔時才換成對方的 id
+// 島的預設位置：跟 index.html 在資料沒指定 x、z 時的算法一致（草圖像素 → 場景單位）
+const LK = 0.145;
+const SK_SLOTS = [[138, 88], [271, 113], [323, 261], [225, 325], [124, 273], [97, 165], [212, 25]];
+const SK_SHIFT = { 2: [10.4, 3.5], 7: [7.1, 4.5] };
+const r1 = v => Math.round(v * 10) / 10;
+const r2 = v => Math.round(v * 100) / 100;
+function rngSeq(seed) { let s = seed * 9301 + 49297; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+function defPosOf(i) {
+  if (i === 0) { return [0, 0]; }
+  if (i <= 7) { const sl = SK_SLOTS[i - 1], sh = SK_SHIFT[i] || [0, 0]; return [r1((sl[0] - 220) * LK + sh[0]), r1((sl[1] - 198) * LK + sh[1])]; }
+  const f = rngSeq(2024); let a = 0; for (let k = 0; k <= i - 8; k++) { a = f() * Math.PI * 2; } // 第 9 座以後：index.html 用固定亂數種子放在半徑 34 的圓上
+  return [r1(Math.cos(a) * 34), r1(Math.sin(a) * 34)];
+}
+
+let rows = [], uidSeq = 1, sel = 0, dirty = false;
+function loadRows(arr) {
+  rows = arr.map((r, i) => ({ _u: uidSeq++, id: r.id || '', title: r.title || '', desc: r.desc || '', link: r.link || '', color: r.color || '#6fbf73', shape: r.shape || 'house', nb: [],
+    x: typeof r.x === 'number' ? r.x : defPosOf(i)[0], z: typeof r.z === 'number' ? r.z : defPosOf(i)[1],
+    chars: Array.isArray(r.characters) ? r.characters.map(c => ({ type: String(c.type || ''), x: +c.x || 0, y: +c.y || 0, z: +c.z || 0, ry: +c.ry || 0 })) : [],
+    scale: +r.scale > 0 ? +r.scale : 1, seed: typeof r.seed === 'number' ? r.seed : null }));
+  arr.forEach((r, i) => {
+    (r.bridges || []).forEach(bid => {
+      const j = rows.findIndex(x => x.id === bid);
+      if (j >= 0 && j !== i && rows[i].nb.includes(rows[j]._u) === false) { rows[i].nb.push(rows[j]._u); rows[j].nb.push(rows[i]._u); } // 只寫一邊也補成兩邊對稱
+    });
+  });
+  // 舊格式檔（整份都沒有 bridges 欄位）：index.html 會用寫死的連法，這裡帶入同樣的連法，畫面與工具看到的一致，存檔後才變成明確的 bridges
+  if (arr.some(r => Array.isArray(r.bridges)) === false) {
+    const legacy = [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [6, 5], [2, 3], [4, 3], [0, 7], [2, 7]]; // 對應 index.html 的 EDGES
+    for (let k = 8; k < rows.length; k++) { legacy.push([0, k]); } // 第 9 座以後直接連中央
+    legacy.forEach(([a, b]) => { if (a < rows.length && b < rows.length) { rows[a].nb.push(rows[b]._u); rows[b].nb.push(rows[a]._u); } });
+  }
+}
+loadRows(Array.isArray(window.ISLANDS) ? window.ISLANDS : []);
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ---------- 檢查 ----------
+function check() {
+  const errs = [], ids = {};
+  rows.forEach((r, i) => {
+    const n = i + 1;
+    if (r.id === '') { errs.push([i, 'id', '第 ' + n + ' 列的 id 不能空白']); }
+    else if (/^[a-z][a-z0-9_-]*$/.test(r.id) === false) { errs.push([i, 'id', '第 ' + n + ' 列的 id 只能用小寫英文、數字、- 、_，且要英文開頭']); }
+    else if (ids[r.id] !== undefined) { errs.push([i, 'id', '第 ' + n + ' 列的 id「' + r.id + '」跟第 ' + (ids[r.id] + 1) + ' 列重複']); }
+    else { ids[r.id] = i; }
+    if (SHAPE_LABEL[r.shape] === undefined) { errs.push([i, 'shape', '第 ' + n + ' 列的 shape「' + r.shape + '」不是有效的建築類型']); }
+    r.chars.forEach(c => { if (CHAR_LABEL[c.type] === undefined) { errs.push([i, 'chars', '第 ' + n + ' 列的人物「' + c.type + '」不是有效的人物種類']); } });
+  });
+  return errs;
+}
+
+// ---------- 畫表格 ----------
+function render() {
+  const errs = check(), bad = new Set(errs.map(e => e[0] + ':' + e[1]));
+  const tb = $('tb'); tb.innerHTML = '';
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr'); if (i === sel) { tr.className = 'sel'; }
+    const cell = (html) => { const td = document.createElement('td'); if (html !== undefined) { td.innerHTML = html; } tr.appendChild(td); return td; };
+    const no = cell(String(i + 1).padStart(2, '0')); no.className = 'no'; no.onclick = () => select(i);
+    const txt = (key, ph) => {
+      const td = cell(), inp = document.createElement('input'); inp.type = 'text'; inp.value = r[key]; inp.placeholder = ph || '';
+      if (bad.has(i + ':' + key)) { inp.className = 'bad'; }
+      inp.oninput = () => { r[key] = inp.value; touch(); renderMsgOnly(); };
+      inp.onfocus = () => { if (sel !== i) { select(i, true); } };
+      td.appendChild(inp);
+    };
+    txt('id', 'cinema'); txt('title', '電影院'); txt('desc', '（選填）'); txt('link', 'pages/xxx.html（選填）');
+    const tc = cell(), col = document.createElement('input'); col.type = 'color'; col.value = r.color;
+    col.oninput = () => { r.color = col.value; touch(); if (sel === i) { updatePreview(); } };
+    col.onfocus = () => { if (sel !== i) { select(i, true); } };
+    tc.appendChild(col);
+    const ts = cell(), sb = document.createElement('button'); sb.className = 'shapebtn' + (bad.has(i + ':shape') ? ' bad' : '');
+    sb.innerHTML = '<span>' + (SHAPE_LABEL[r.shape] || '（無效）') + '</span><small>' + r.shape + '</small>';
+    sb.onclick = (ev) => { ev.stopPropagation(); select(i, true); openPop(sb, i); };
+    ts.appendChild(sb);
+    const tn = cell(); // 相連的橋：列出相連的島，按「進入島編輯模式」開啟選擇視窗
+    r.nb.forEach(u => { const o = rows.find(x => x._u === u); if (o !== undefined) { const s = document.createElement('span'); s.className = 'chip'; s.textContent = String(rows.indexOf(o) + 1).padStart(2, '0') + ' ' + (o.title || o.id); tn.appendChild(s); } });
+    if (r.nb.length === 0) { const s = document.createElement('span'); s.className = 'chip none'; s.textContent = '（沒有橋）'; tn.appendChild(s); }
+    const cb = document.createElement('button'); cb.className = 'sm'; cb.textContent = '在地圖上編輯'; cb.onclick = () => openEm(i); tn.appendChild(cb);
+    const tp = cell(); // 島上人物：只列名稱，要增減或移動請按「在地圖上編輯」
+    r.chars.forEach(c => { const s = document.createElement('span'); s.className = 'chip'; s.textContent = CHAR_LABEL[c.type] || (c.type + '（無效）'); tp.appendChild(s); });
+    if (r.chars.length === 0) { const s = document.createElement('span'); s.className = 'chip'; s.style.color = '#999'; s.textContent = '（沒有）'; tp.appendChild(s); }
+    const ta = cell(); ta.className = 'acts';
+    const mkb = (t, fn, dis) => { const b = document.createElement('button'); b.className = 'sm'; b.textContent = t; b.disabled = !!dis; b.onclick = fn; ta.appendChild(b); ta.appendChild(document.createTextNode(' ')); };
+    mkb('↑', () => move(i, -1), i === 0); mkb('↓', () => move(i, 1), i === rows.length - 1);
+    tb.appendChild(tr);
+  });
+  renderMsgOnly(); updatePreview();
+}
+function renderMsgOnly() {
+  const errs = check(), m = $('msg');
+  let h = '';
+  errs.forEach(e => { h += '<div class="e">✗ ' + e[2] + '</div>'; });
+  if (rows.length > 1) { rows.forEach((r, i) => { if (r.nb.length === 0) { h += '<div class="w">！第 ' + (i + 1) + ' 列「' + esc(r.title || r.id) + '」沒有任何橋，會是一座孤島（按「進入島編輯模式」選擇相連的島）。</div>'; } }); }
+  if (errs.length === 0) { h += '<div class="o">✓ 資料檢查通過，可以儲存。</div>'; }
+  m.innerHTML = h;
+  $('bSave').disabled = $('bDown').disabled = $('bCopy').disabled = errs.length > 0;
+  document.querySelectorAll('input[type=text]').forEach(() => {});
+}
+function touch() { dirty = true; $('dirty').textContent = '● 有尚未儲存的修改'; }
+function move(i, d) { const j = i + d; [rows[i], rows[j]] = [rows[j], rows[i]]; if (sel === i) { sel = j; } else if (sel === j) { sel = i; } touch(); render(); }
+function select(i, noRender) { sel = i; if (noRender) { document.querySelectorAll('#tb tr').forEach((tr, k) => { tr.className = k === i ? 'sel' : ''; }); updatePreview(); } else { render(); } }
+
+// ---------- 預覽：iframe 載入 index.html?preview=建築&color=顏色 ----------
+let pvTimer = null, pvKey = '';
+let custom = null; // 手動載入的建築檔案：{ fileName, name, label, desc, dataUrl }；有值時預覽改畫這個檔案
+function previewUrl(shape, color) {
+  if (custom !== null && custom.kind === 'character') { // 載入的是人物：放在小鎮島的正面前方看
+    return 'index.html?preview=house&color=' + encodeURIComponent(color) + '&characters=' + encodeURIComponent(JSON.stringify([{ type: custom.name, x: 0, y: 0, z: 2.6, ry: 0 }])) + '&shapejs=' + encodeURIComponent(custom.dataUrl);
+  }
+  const r = rows[sel], chars = (r !== undefined && r.chars.length > 0) ? '&characters=' + encodeURIComponent(JSON.stringify(r.chars)) : '', ex = r !== undefined ? ((r.scale !== 1 ? '&scale=' + r.scale : '') + '&seed=' + effSeed(sel)) : '';
+  return 'index.html?preview=' + encodeURIComponent(shape) + '&color=' + encodeURIComponent(color) + chars + ex + (custom !== null ? '&shapejs=' + encodeURIComponent(custom.dataUrl) : '');
+}
+function showPreview(shape, color, caption) {
+  $('pvcap').textContent = caption;
+  const url = previewUrl(shape, color);
+  if (url === pvKey) { return; }
+  clearTimeout(pvTimer);
+  pvTimer = setTimeout(() => { pvKey = url; $('pv').src = url; }, 250); // 滑鼠快速掃過時不要每個都載入
+}
+function updatePreview() {
+  const r = rows[sel];
+  if (custom !== null) { // 載入了建築檔案：釘在這個預覽，直到按「清除」
+    const same = (custom.kind === 'character' ? CHAR_LABEL : SHAPE_LABEL)[custom.name] !== undefined;
+    showPreview(custom.kind === 'character' ? 'house' : custom.name, r !== undefined ? r.color : '#c4503a', '預覽載入的' + (custom.kind === 'character' ? '人物' : '建築') + '檔案「' + custom.fileName + '」：' + custom.label + '（' + custom.name + '）' + (custom.kind === 'character' ? '，放在小鎮島的正面前方' : '') + (same ? '，跟現有同名，預覽中以載入的檔案為準' : ''));
+    return;
+  }
+  if (r === undefined) { $('pvcap').textContent = '（沒有資料）'; return; }
+  showPreview(SHAPE_LABEL[r.shape] ? r.shape : 'house', r.color, '第 ' + (sel + 1) + ' 座「' + (r.title || r.id || '未命名') + '」：' + (SHAPE_LABEL[r.shape] || '無效的建築') + '（' + r.shape + '）');
+}
+
+// ---------- 選 shape 的彈出清單 ----------
+const pop = $('pop'); let popRow = -1;
+function openPop(anchor, i) {
+  popRow = i; pop.innerHTML = '';
+  SHAPES.forEach(([key, name, desc]) => {
+    const d = document.createElement('div'); d.className = 'opt' + (rows[i].shape === key ? ' cur' : '');
+    // 有 shape_previews/<shape>.png 就顯示縮圖（沒有就不顯示，不影響使用）
+    d.innerHTML = '<img src="shape_previews/' + key + '.png" alt="" onerror="this.style.display=\'none\'"><div><b>' + name + '</b> <small>' + key + '</small><small>' + desc + '</small></div>';
+    d.onmouseenter = () => showPreview(key, rows[i].color, '預覽：' + name + '（' + key + '）— 尚未套用，點一下才會選用');
+    d.onclick = () => { rows[i].shape = key; touch(); closePop(); render(); };
+    pop.appendChild(d);
+  });
+  const rc = anchor.getBoundingClientRect();
+  pop.style.display = 'block';
+  pop.style.left = Math.min(rc.left, innerWidth - 380) + 'px';
+  pop.style.top = Math.min(rc.bottom + 4, innerHeight - pop.offsetHeight - 10) + 'px';
+}
+function closePop() { pop.style.display = 'none'; popRow = -1; updatePreview(); }
+document.addEventListener('mousedown', e => { if (popRow >= 0 && pop.contains(e.target) === false && e.target.closest('.shapebtn') === null) { closePop(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && popRow >= 0) { closePop(); } });
+
+// ---------- 輸出 / 存檔 / 載入 ----------
+function buildJs() {
+  const J = JSON.stringify;
+  const nbIds = r => r.nb.map(u => rows.find(x => x._u === u)).filter(x => x !== undefined).map(x => x.id);
+  const body = rows.map(r => '  { "id": ' + J(r.id) + ', "title": ' + J(r.title) + ', "desc": ' + J(r.desc) + ', "link": ' + J(r.link) + ', "color": ' + J(r.color) + ', "shape": ' + J(r.shape) + ', "x": ' + r1(r.x) + ', "z": ' + r1(r.z) + (r.scale !== 1 ? ', "scale": ' + r2(r.scale) : '') + (r.seed !== null ? ', "seed": ' + r.seed : '') + ', "bridges": ' + J(nbIds(r)).replace(/,/g, ', ') + ', "characters": ' + J(r.chars.map(c => ({ type: c.type, x: r1(c.x), y: r1(c.y), z: r1(c.z), ry: r1(c.ry) }))).replace(/,/g, ', ') + ' }').join(',\n');
+  return HEADER + 'window.ISLANDS = [\n' + body + '\n];\n' + themeJs();
+}
+function saved() { dirty = false; $('dirty').textContent = '✓ 已儲存'; }
+$('bSave').onclick = async () => {
+  if (window.showSaveFilePicker === undefined) { alert('這個瀏覽器不支援直接存到檔案，請改用「下載 islands_data.js」（Edge、Chrome 支援直接存檔）。'); return; }
+  try {
+    const h = await showSaveFilePicker({ suggestedName: 'islands_data.js', types: [{ description: 'JavaScript', accept: { 'text/javascript': ['.js'] } }] });
+    const w = await h.createWritable(); await w.write(buildJs()); await w.close(); saved();
+  } catch (e) { if (e.name !== 'AbortError') { alert('存檔失敗：' + e.message); } }
+};
+$('bDown').onclick = () => {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buildJs()], { type: 'text/javascript' })); a.download = 'islands_data.js'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); saved();
+};
+$('bCopy').onclick = async () => { try { await navigator.clipboard.writeText(buildJs()); $('dirty').textContent = '✓ 已複製到剪貼簿'; } catch (e) { alert('複製失敗：' + e.message); } };
+$('bLoad').onclick = () => $('fileIn').click();
+$('fileIn').onchange = async (ev) => {
+  const f = ev.target.files[0]; if (f === undefined) { return; }
+  try {
+    const w = {}; new Function('window', await f.text())(w);
+    if (Array.isArray(w.ISLANDS) === false) { throw new Error('檔案裡找不到 window.ISLANDS 陣列'); }
+    loadRows(w.ISLANDS); loadTheme(w.ISLAND_THEME);
+    sel = 0; touch(); render();
+  } catch (e) { alert('載入失敗：' + e.message); }
+  ev.target.value = '';
+};
+$('bEdit').onclick = () => openEm();
+
+// ---------- 平面圖共用（草圖像素座標，中央主島在 220,198；1 單位 = 1/LK 像素）----------
+const rOf = i => { const r = rows[i], S = window.ISLAND_SHAPES[r.shape]; return (S && S.isle === true ? (S.baseR || 2.5) : (i === 0 ? 5.8 : 5)) * r.scale; }; // 島的實際半徑（場景單位）：基本半徑（跟 index.html 一致）乘上這座島的 scale
+const toPx = (x, z) => [220 + x / LK, 198 + z / LK];
+function toggleBridge(a, b) {
+  const ra = rows[a], rb = rows[b];
+  if (ra.nb.includes(rb._u)) { ra.nb = ra.nb.filter(u => u !== rb._u); rb.nb = rb.nb.filter(u => u !== ra._u); }
+  else { ra.nb.push(rb._u); rb.nb.push(ra._u); }
+  touch();
+}
+// 新增島時的預設位置：在半徑 34 的圓上挑離其他島最遠的角度
+function freeSpot() {
+  let best = [34, 0], bestD = -1;
+  for (let a = 0; a < 360; a += 5) {
+    const x = r1(Math.cos(a * Math.PI / 180) * 34), z = r1(Math.sin(a * Math.PI / 180) * 34);
+    const d = Math.min(...rows.map(r => Math.hypot(r.x - x, r.z - z)));
+    if (d > bestD) { bestD = d; best = [x, z]; }
+  }
+  return best;
+}
+function gridSvg() { // 格線：每 10 個單位一條
+  let h = '';
+  const a = toPx(-50, -50), b = toPx(50, 50);
+  for (let g = -50; g <= 50; g += 10) {
+    const gx = toPx(g, 0)[0], gy = toPx(0, g)[1], c = g === 0 ? '#8fb8c6' : '#cde3ea', w = g === 0 ? 2 : 1;
+    h += '<line x1="' + gx + '" y1="' + a[1] + '" x2="' + gx + '" y2="' + b[1] + '" stroke="' + c + '" stroke-width="' + w + '"/><line x1="' + a[0] + '" y1="' + gy + '" x2="' + b[0] + '" y2="' + gy + '" stroke="' + c + '" stroke-width="' + w + '"/>';
+  }
+  return h;
+}
+function bridgeSvg(hl) { // 橋（跟 hl 這座島有關的畫粗、深綠）與旁邊掛的小島（虛線圓）
+  let h = '';
+  rows.forEach((r, i) => r.nb.forEach(u => {
+    const j = rows.findIndex(x => x._u === u);
+    if (j > i) { const p = toPx(r.x, r.z), q = toPx(rows[j].x, rows[j].z), on = (i === hl || j === hl); h += '<line x1="' + p[0] + '" y1="' + p[1] + '" x2="' + q[0] + '" y2="' + q[1] + '" stroke="' + (on ? '#2f6b50' : '#9aa') + '" stroke-width="' + (on ? 5 : 3) + '"/>'; }
+  }));
+  return h;
+}
+function nodeSvg(i, big, hi, cursor) { // 一座島：淡色大圓（實際大小）＋編號圓點＋名稱
+  const r = rows[i], p = toPx(r.x, r.z);
+  return '<g class="nd" data-i="' + i + '" transform="translate(' + p[0] + ' ' + p[1] + ')" style="cursor:' + cursor + '">'
+    + '<circle r="' + (rOf(i) / LK) + '" fill="' + esc(r.color) + '" fill-opacity="0.22" stroke="' + esc(r.color) + '" stroke-opacity="0.55" stroke-width="1.5"/>'
+    + '<circle class="mk" r="' + (big ? 24 : 19) + '" fill="' + esc(r.color) + '" stroke="' + (hi ? '#2f6b50' : '#fff') + '" stroke-width="' + (big ? 5 : hi ? 4 : 2) + '"/>'
+    + '<text y="5" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold" pointer-events="none">' + (i + 1) + '</text>'
+    + '<text y="42" text-anchor="middle" fill="#234" font-size="13" pointer-events="none">' + esc(r.title || r.id) + '</text></g>';
+}
+function svgPoint(svg, ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); }
+
+// ---------- 設定連接視窗：在島編輯模式選好島、按「設定連接…」才會開 ----------
+let cnRow = -1;
+function openCn(i) {
+  cnRow = i;
+  $('cnTitle').textContent = '第 ' + (i + 1) + ' 座「' + (rows[i].title || rows[i].id) + '」要用橋連到哪些島？';
+  $('cn').style.display = 'flex'; drawCn();
+}
+function drawCn() {
+  const me = rows[cnRow], svg = $('cnSvg');
+  let h = gridSvg() + bridgeSvg(cnRow);
+  rows.forEach((r, i) => { h += nodeSvg(i, i === cnRow, i === cnRow || me.nb.includes(r._u), i === cnRow ? 'default' : 'pointer'); });
+  svg.innerHTML = h;
+  svg.querySelectorAll('.nd').forEach(g => { const i = +g.dataset.i; if (i !== cnRow) { g.onclick = () => { toggleBridge(cnRow, i); drawCn(); }; } });
+  let l = '';
+  rows.forEach((r, i) => { if (i !== cnRow) { l += '<label><input type="checkbox" data-i="' + i + '"' + (me.nb.includes(r._u) ? ' checked' : '') + '> ' + String(i + 1).padStart(2, '0') + ' ' + esc(r.title || r.id) + ' <small>' + esc(r.id) + '</small></label>'; } });
+  $('cnList').innerHTML = l;
+  $('cnList').querySelectorAll('input').forEach(c => { c.onchange = () => { toggleBridge(cnRow, +c.dataset.i); drawCn(); }; });
+}
+function closeCn() { $('cn').style.display = 'none'; cnRow = -1; if (emOn) { drawEm(); } else { render(); } }
+$('cnOk').onclick = closeCn;
+
+// ---------- 島編輯模式：鳥瞰平面圖。拖動島＝移動位置；新增、刪除島嶼只能在這裡 ----------
+let emOn = false, emDrag = -1;
+function openEm(i) {
+  if (i !== undefined) { sel = i; }
+  if (sel < 0 || sel >= rows.length) { sel = 0; }
+  em3dKey = ''; emOn = true; $('em').style.display = 'flex'; drawEm();
+}
+function closeEm() { emOn = false; $('emPv').src = 'about:blank'; em3dKey = ''; $('em').style.display = 'none'; render(); }
+function snapV(v) { const s = +$('emSnap').value, f = s > 0 ? Math.round(v / s) * s : r1(v); return Math.max(-48, Math.min(48, f)); }
+function emWarnUpdate() { // 跟選中的島重疊就提示
+  const r = rows[sel], ov = [];
+  if (r !== undefined) { rows.forEach((o, j) => { if (j !== sel && Math.hypot(o.x - r.x, o.z - r.z) < rOf(j) + rOf(sel) - 1) { ov.push('第 ' + (j + 1) + ' 座「' + esc(o.title || o.id) + '」'); } }); }
+  $('emWarn').innerHTML = ov.length > 0 ? '！跟 ' + ov.join('、') + ' 的島重疊了，建議拉開一點。' : '';
+}
+function syncEmSide() {
+  const r = rows[sel];
+  if (r === undefined) { $('emInfo').textContent = '（沒有島）'; return; }
+  $('emInfo').innerHTML = '<b>第 ' + (sel + 1) + ' 座「' + esc(r.title || r.id) + '」</b><br><small>' + esc(r.id) + '・' + esc(SHAPE_LABEL[r.shape] || r.shape) + '</small>';
+  $('emX').value = r.x; $('emZ').value = r.z; $('emScale').value = r.scale; $('emScaleN').value = r.scale;
+  $('emSeed').value = effSeed(sel); $('emSeedNote').textContent = r.seed === null ? '目前是「自動」：島形與植物依這座島在清單裡的順序決定，調整順序外形會跟著變；按「固定」就不會變。' : '已固定：外形只看 seed，調整順序、增減其他島都不會改變。';
+  $('emX').disabled = $('emZ').disabled = $('emReset').disabled = $('emDel').disabled = (sel === 0); // 中央主島固定在 0,0，不能移動也不能刪
+  $('emFix').style.display = sel === 0 ? 'block' : 'none';
+  let l = '';
+  rows.forEach((x, i) => { l += '<div class="li' + (i === sel ? ' cur' : '') + '" data-i="' + i + '"><b>' + String(i + 1).padStart(2, '0') + '</b> ' + esc(x.title || x.id) + ' <small>' + esc(x.id) + '</small></div>'; });
+  $('emList').innerHTML = l;
+  $('emList').querySelectorAll('.li').forEach(d => { d.onclick = () => selectEm(+d.dataset.i); });
+  emWarnUpdate(); syncEmChars();
+}
+function selectEm(i) { // 只改外觀、不重建圖，才不會打斷正在進行的拖動
+  sel = i;
+  document.querySelectorAll('#emSvg .nd').forEach(g => {
+    const k = +g.dataset.i, c = g.querySelector('.mk');
+    c.setAttribute('stroke', k === sel ? '#2f6b50' : '#fff'); c.setAttribute('stroke-width', k === sel ? 5 : 2); c.setAttribute('r', k === sel ? 24 : 19);
+  });
+  $('emLines').innerHTML = bridgeSvg(sel); drawEmMarks(); syncEmSide();
+}
+function drawEm() {
+  const svg = $('emSvg');
+  let h = gridSvg() + '<g id="emLines">' + bridgeSvg(sel) + '</g>';
+  rows.forEach((r, i) => { h += nodeSvg(i, i === sel, i === sel, i === 0 ? 'not-allowed' : 'grab'); });
+  h += '<g id="emMarks"></g>'; // 人物小圓點（在島的上面一層）
+  svg.innerHTML = h;
+  svg.querySelectorAll('.nd').forEach(g => {
+    const i = +g.dataset.i;
+    g.addEventListener('pointerdown', ev => { if (ev.button !== 0) { return; } ev.preventDefault(); selectEm(i); if (i > 0) { g.setPointerCapture(ev.pointerId); emDrag = i; } });
+    g.addEventListener('pointermove', ev => {
+      if (emDrag !== i) { return; }
+      const q = svgPoint(svg, ev), ox = rows[i].x, oz = rows[i].z;
+      rows[i].x = snapV((q.x - 220) * LK); rows[i].z = snapV((q.y - 198) * LK);
+      if (rows[i].x === ox && rows[i].z === oz) { return; }
+      const np = toPx(rows[i].x, rows[i].z); g.setAttribute('transform', 'translate(' + np[0] + ' ' + np[1] + ')');
+      $('emLines').innerHTML = bridgeSvg(sel); drawEmMarks(); $('emX').value = rows[i].x; $('emZ').value = rows[i].z; emWarnUpdate(); touch();
+    });
+    g.addEventListener('pointerup', () => { emDrag = -1; });
+  });
+  drawEmMarks(); syncEmSide();
+}
+$('emOk').onclick = closeEm;
+$('emConn').onclick = () => { if (rows[sel] !== undefined) { openCn(sel); } };
+$('emReset').onclick = () => { const p = defPosOf(sel); rows[sel].x = p[0]; rows[sel].z = p[1]; touch(); drawEm(); };
+$('emX').onchange = $('emZ').onchange = () => { const f = v => Math.max(-48, Math.min(48, r1(+v || 0))); rows[sel].x = f($('emX').value); rows[sel].z = f($('emZ').value); touch(); drawEm(); };
+$('emAdd').onclick = () => {
+  let n = rows.length + 1, id = 'island' + n; while (rows.some(r => r.id === id)) { n++; id = 'island' + n; }
+  const fp = freeSpot(); rows.push({ _u: uidSeq++, id, title: '新的島', desc: '', link: '', color: '#6fbf73', shape: 'house', nb: [], chars: [], scale: 1, seed: null, x: fp[0], z: fp[1] });
+  sel = rows.length - 1; touch(); drawEm(); // 新增後直接選中，位置先放在外圍空的地方；要連橋再按「設定連接…」
+};
+$('emDel').onclick = () => {
+  const r = rows[sel]; if (r === undefined || sel === 0) { return; }
+  if (confirm('刪除第 ' + (sel + 1) + ' 座「' + (r.title || r.id) + '」？（跟它相連的橋也會一起拿掉）') === false) { return; }
+  rows.splice(sel, 1); rows.forEach(x => { x.nb = x.nb.filter(u => u !== r._u); });
+  if (sel >= rows.length) { sel = rows.length - 1; } touch(); drawEm();
+};
+// ---------- 島上人物：側欄編輯＋地圖小圓點（建築座標 → 平面圖：依島朝向中央的角度旋轉）----------
+let chDrag = null;
+function charWorld(isl, i, c) { const face = i === 0 ? 0 : Math.atan2(-isl.x, -isl.z), s = Math.sin(face), co = Math.cos(face); return [isl.x + (c.x * co + c.z * s) * isl.scale, isl.z + (-c.x * s + c.z * co) * isl.scale]; }
+function drawEmMarks() {
+  const g = $('emMarks'); if (g === null) { return; }
+  let h = '';
+  rows.forEach((r, i) => r.chars.forEach((c, k) => {
+    const w = charWorld(r, i, c), p = toPx(w[0], w[1]), on = (i === sel);
+    h += '<g class="cm" data-i="' + i + '" data-k="' + k + '" transform="translate(' + p[0] + ' ' + p[1] + ')" style="cursor:' + (on ? 'grab' : 'pointer') + '"><circle r="9" fill="#17382a" stroke="#fff" stroke-width="' + (on ? 3 : 1.5) + '"/>'
+      + '<text y="4" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold" pointer-events="none">人</text><title>' + esc(CHAR_LABEL[c.type] || c.type) + '</title></g>';
+  }));
+  g.innerHTML = h;
+  g.querySelectorAll('.cm').forEach(m => {
+    const i = +m.dataset.i, k = +m.dataset.k;
+    m.addEventListener('pointerdown', ev => { if (ev.button !== 0) { return; } ev.preventDefault(); ev.stopPropagation(); if (i !== sel) { selectEm(i); return; } m.setPointerCapture(ev.pointerId); chDrag = { i, k }; });
+    m.addEventListener('pointermove', ev => {
+      if (chDrag === null || chDrag.i !== i || chDrag.k !== k) { return; }
+      const q = svgPoint($('emSvg'), ev), isl = rows[i], c = isl.chars[k], face = i === 0 ? 0 : Math.atan2(-isl.x, -isl.z), s = Math.sin(face), co = Math.cos(face);
+      const wx = ((q.x - 220) * LK - isl.x) / isl.scale, wz = ((q.y - 198) * LK - isl.z) / isl.scale;
+      c.x = r1(wx * co - wz * s); c.z = r1(wx * s + wz * co);
+      const w = charWorld(isl, i, c), p = toPx(w[0], w[1]); m.setAttribute('transform', 'translate(' + p[0] + ' ' + p[1] + ')');
+      syncEmChars(); touch();
+    });
+    m.addEventListener('pointerup', () => { chDrag = null; });
+  });
+}
+function syncEmChars() {
+  const r = rows[sel], box = $('emChars');
+  if (r === undefined) { box.innerHTML = ''; return; }
+  let h = '';
+  r.chars.forEach((c, k) => {
+    const opts = CHARS.map(([key, name]) => '<option value="' + esc(key) + '"' + (c.type === key ? ' selected' : '') + '>' + esc(name) + '</option>').join('')
+      + (CHAR_LABEL[c.type] === undefined ? '<option value="' + esc(c.type) + '" selected>' + esc(c.type) + '（無效）</option>' : '');
+    const num = f => '<input type="number" step="0.1" data-k="' + k + '" data-f="' + f + '" value="' + c[f] + '">';
+    h += '<div class="chrow"><select data-k="' + k + '" data-f="type">' + opts + '</select> <button class="sm" data-del="' + k + '">刪除</button><br>X ' + num('x') + ' Y ' + num('y') + ' Z ' + num('z') + ' 面向° ' + num('ry') + '</div>';
+  });
+  box.innerHTML = h || '<p class="sub">這座島沒有人物。</p>';
+  box.querySelectorAll('select,input').forEach(el => { el.onchange = () => { const c = r.chars[+el.dataset.k], f = el.dataset.f; c[f] = f === 'type' ? el.value : r1(+el.value || 0); touch(); drawEmMarks(); em3dSync(); }; });
+  box.querySelectorAll('[data-del]').forEach(b => { b.onclick = () => { r.chars.splice(+b.dataset.del, 1); touch(); drawEmMarks(); syncEmChars(); }; });
+  em3dSync();
+}
+$('emCharAdd').onclick = () => { const r = rows[sel]; if (r === undefined || CHARS.length === 0) { return; } r.chars.push({ type: CHARS[0][0], x: 0, y: 0, z: 2.6, ry: 0 }); touch(); drawEmMarks(); syncEmChars(); };
+// ---------- 島的大小（放大縮小）：整座島（島、建築、樹、人物）一起縮放；拖動滑桿時地圖即時變，放開後 3D 預覽才重新載入 ----------
+function setScale(v) {
+  const r = rows[sel]; if (r === undefined) { return; }
+  r.scale = Math.max(0.3, Math.min(3, r2(+v || 1)));
+  $('emScale').value = r.scale; $('emScaleN').value = r.scale; touch(); drawEm();
+}
+$('emScale').oninput = () => setScale($('emScale').value);
+$('emScale').onchange = () => em3dSync();
+$('emScaleN').onchange = () => { setScale($('emScaleN').value); em3dSync(); };
+$('emScaleReset').onclick = () => { setScale(1); em3dSync(); };
+
+// ---------- 外形（seed）：島形與植物散布的亂數種子。沒固定時依編號自動算（一般島＝編號，小島型＝100＋編號）----------
+function effSeed(i) { const r = rows[i], S = window.ISLAND_SHAPES[r.shape]; return r.seed !== null ? r.seed : (S && S.isle === true ? 100 + i : i); }
+function setSeed(v) { const r = rows[sel]; if (r === undefined) { return; } r.seed = Math.max(0, Math.min(99999, Math.floor(+v || 0))); touch(); syncEmSide(); em3dSync(); }
+$('emReroll').onclick = () => setSeed(100 + Math.floor(Math.random() * 9900)); // 換個樣子：隨機換一個 seed，右下角 3D 預覽立刻重畫
+$('emSeed').onchange = () => setSeed($('emSeed').value);
+$('emSeedFix').onclick = () => { if (rows[sel] !== undefined && rows[sel].seed === null) { setSeed(effSeed(sel)); } }; // 固定：把目前自動算出來的 seed 寫死，外形不變
+$('emSeedAuto').onclick = () => { const r = rows[sel]; if (r === undefined) { return; } r.seed = null; touch(); syncEmSide(); em3dSync(); };
+
+// ---------- 島編輯模式右下角的 3D 預覽：選島、島的建築或顏色不同時重新載入；只有人物變動時用 postMessage 即時換（不重新載入）----------
+let em3dKey = '', em3dChars = '', em3dTimer = null;
+function em3dSend() {
+  const r = rows[sel]; if (r === undefined) { return; }
+  try { $('emPv').contentWindow.postMessage({ type: 'island-characters', characters: r.chars }, '*'); } catch (e) { /* 預覽還沒載入好就略過，載入完成時會再送一次 */ }
+}
+function em3dSync() {
+  const r = rows[sel]; if (emOn === false || r === undefined) { return; }
+  const shape = SHAPE_LABEL[r.shape] ? r.shape : 'house', key = shape + '|' + r.color + '|' + r.scale + '|' + effSeed(sel), chars = JSON.stringify(r.chars);
+  $('em3dCap').textContent = '3D 預覽：第 ' + (sel + 1) + ' 座「' + (r.title || r.id) + '」（' + (SHAPE_LABEL[shape] || shape) + '）';
+  if (key !== em3dKey) {
+    em3dKey = key; em3dChars = chars;
+    $('emPv').src = 'index.html?preview=' + encodeURIComponent(shape) + '&color=' + encodeURIComponent(r.color) + (r.chars.length > 0 ? '&characters=' + encodeURIComponent(chars) : '') + (r.scale !== 1 ? '&scale=' + r.scale : '') + '&seed=' + effSeed(sel);
+  } else if (chars !== em3dChars) {
+    em3dChars = chars; clearTimeout(em3dTimer); em3dTimer = setTimeout(em3dSend, 60); // 拖動人物時合併連續的更新
+  }
+}
+$('emPv').addEventListener('load', () => { if (emOn) { em3dSend(); } });
+
+// ---------- 網頁外觀（ISLAND_THEME）：左上角文字、字型、顏色；主配色與副配色 ----------
+// 存在 islands_data.js 的 window.ISLAND_THEME；首頁（index.html）載入時套用。沒設定的項目就用原本的樣式
+const THEME_DEFAULT = { title: '福華名品', subtitle: '真誠福華心，服務最用心', font: '', titleColor: '#222222', subtitleColor: '#777777', primary: '#af272f', secondary: '#af272f' };
+let theme = Object.assign({}, THEME_DEFAULT);
+const hexOk = h => /^#[0-9a-fA-F]{6}$/.test(h || '');
+function loadTheme(o) {
+  theme = Object.assign({}, THEME_DEFAULT);
+  if (o !== null && typeof o === 'object') {
+    ['title', 'subtitle', 'font'].forEach(k => { if (typeof o[k] === 'string') { theme[k] = o[k]; } });
+    ['titleColor', 'subtitleColor', 'primary', 'secondary'].forEach(k => { if (hexOk(o[k])) { theme[k] = o[k]; } });
+  }
+}
+loadTheme(window.ISLAND_THEME); thLogoShow();
+function themeJs() {
+  const J = JSON.stringify;
+  return '\nwindow.ISLAND_THEME = {\n  "title": ' + J(theme.title) + ',\n  "subtitle": ' + J(theme.subtitle) + ',\n  "font": ' + J(theme.font) + ',\n  "titleColor": ' + J(theme.titleColor)
+    + ',\n  "subtitleColor": ' + J(theme.subtitleColor) + ',\n  "primary": ' + J(theme.primary) + ',\n  "secondary": ' + J(theme.secondary) + '\n};\n';
+}
+// 字型預設清單（值是 font-family 的名稱，可以用逗號列多個）。注意：字型要在「顯示網頁的那台機器」上有安裝才會生效，沒有就退回預設字型
+const FONT_PRESETS = [['', '預設（思源黑體／微軟正黑體）'], ['Microsoft JhengHei', '微軟正黑體'], ['Noto Sans CJK TC', '思源黑體'], ['DFKai-SB,BiauKai,標楷體', '標楷體'], ['PMingLiU,Noto Serif CJK TC,Noto Serif TC', '明體（新細明體／思源宋體）']];
+const thRgb = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const thOn = h => { const c = thRgb(h); return (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) > 160 ? '#222' : '#fff'; }; // 淺色底配深字、深色底配白字（跟首頁一致）
+const thDark = h => '#' + thRgb(h).map(v => ('0' + Math.round(v * 0.8).toString(16)).slice(-2)).join('');
+function thFontCss(s) { // 跟首頁一致：每個名稱加引號，最後接預設字型當備用
+  const f = s.split(',').map(n => n.trim().replace(/["']/g, '')).filter(Boolean).map(n => (/^(serif|sans-serif|monospace|cursive|system-ui)$/i.test(n) ? n : '"' + n + '"')).join(',');
+  return (f === '' ? '' : f + ',') + '"Noto Sans CJK TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif';
+}
+function drawThemePreview() { // 對話窗裡的即時預覽（簡化版的首頁左上角、右上角、島嶼標籤）
+  const t = theme, on = thOn(t.primary);
+  $('pBar').style.background = t.primary;
+  $('pTitle').style.fontFamily = thFontCss(t.font);
+  $('pH1').textContent = t.title; $('pH1').style.color = t.titleColor; $('pH1').style.display = t.title === '' ? 'none' : 'block';
+  $('pP').textContent = t.subtitle; $('pP').style.color = t.subtitleColor; $('pP').style.display = t.subtitle === '' ? 'none' : 'block';
+  $('pTitle').style.display = (t.title === '' && t.subtitle === '') ? 'none' : 'block';
+  $('pReset').style.background = t.primary; $('pReset').style.borderColor = t.primary; $('pReset').style.color = on;
+  $('pTrack').style.setProperty('--tc', t.primary); $('pThumb').style.background = t.primary;
+  [$('pPlus'), $('pMinus')].forEach(b => { b.style.borderColor = t.secondary; b.style.color = t.secondary; });
+  $('pBadge').style.background = t.secondary; $('pBadge').style.color = thOn(t.secondary);
+  $('thPrimaryHex').textContent = t.primary; $('thSecondaryHex').textContent = t.secondary;
+}
+function fillThemeForm() {
+  $('thTitle').value = theme.title; $('thSub').value = theme.subtitle;
+  const idx = FONT_PRESETS.findIndex(p => p[0] === theme.font);
+  $('thFontSel').innerHTML = FONT_PRESETS.map((p, i) => '<option value="' + i + '">' + esc(p[1]) + '</option>').join('') + '<option value="custom">自訂…</option>';
+  $('thFontSel').value = idx >= 0 ? String(idx) : 'custom';
+  $('thFont').value = idx >= 0 ? '' : theme.font; $('thFont').style.display = idx >= 0 ? 'none' : 'inline-block';
+  $('thTitleC').value = theme.titleColor; $('thSubC').value = theme.subtitleColor; $('thPrimary').value = theme.primary; $('thSecondary').value = theme.secondary;
+  drawThemePreview();
+}
+function thLogoShow() { // 預覽目前的 LOGO：來源是同資料夾的 logo_data.js（window.MALL_LOGO）
+  const img = $('thLogoImg');
+  if (typeof window.MALL_LOGO === 'string' && window.MALL_LOGO !== '') { img.src = window.MALL_LOGO; img.style.display = 'inline-block'; } else { img.style.display = 'none'; }
+}
+$('thLogoPick').onclick = () => $('thLogoIn').click();
+// 瀏覽器規定：開啟「選資料夾」視窗一定要由使用者剛按下按鈕的當下呼叫（選完圖再自動開會被擋），所以分兩步：
+// ① 選擇圖片（先預覽）→ ② 按「生成LOGO資料」才選資料夾並寫入。選過一次資料夾，同一次開啟期間之後換圖就不用再選。
+let pendingLogo = null, projDir = null;
+async function writeLogo() { // 只產生 logo_data.js（window.MALL_LOGO = 圖的 data URL），網頁直接讀它，不再用 PNG 檔
+  const f = pendingLogo.file;
+  const du = await new Promise((ok, ng) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => ng(fr.error); fr.readAsDataURL(f); });
+  const fh = await projDir.getFileHandle('logo_data.js', { create: true }), w = await fh.createWritable(); await w.write('window.MALL_LOGO = ' + JSON.stringify(du) + ';\n'); await w.close();
+  window.MALL_LOGO = du; pendingLogo = null; $('thLogoPut').disabled = true; thLogoShow();
+  $('thLogoNote').textContent = '已生成 logo_data.js 並放進專案資料夾。發布時要把這個檔複製到 ISLAND。';
+}
+$('thLogoIn').onchange = async (ev) => {
+  const f = ev.target.files[0]; ev.target.value = ''; if (f === undefined) { return; }
+  if (/\.png$/i.test(f.name) === false) { alert('請選 PNG 圖檔（副檔名 .png）'); return; }
+  const img = $('thLogoImg');
+  img.onerror = null; img.onload = null; img.src = URL.createObjectURL(f); img.style.display = 'inline-block'; // 先顯示選到的圖
+  pendingLogo = { file: f };
+  if (window.showDirectoryPicker === undefined) { alert('這個瀏覽器不能直接寫入資料夾（要用 Edge 或 Chrome）。'); return; }
+  if (projDir !== null) { // 這次已經選過專案資料夾：直接寫入
+    try { await writeLogo(); return; } catch (e) { projDir = null; /* 權限失效或資料夾不能寫：退回讓使用者重選 */ }
+  }
+  $('thLogoNote').textContent = '已選好「' + f.name + '」。接著按「2. 生成LOGO資料」，選含有 index.html 的資料夾，就會產生 logo_data.js 放進專案。';
+  $('thLogoPut').disabled = false;
+};
+$('thLogoPut').onclick = async () => { // 這裡是使用者剛按的按鈕，可以開選資料夾視窗
+  if (pendingLogo === null) { return; }
+  try {
+    const d = await showDirectoryPicker({ mode: 'readwrite' });
+    try { await d.getFileHandle('index.html'); } catch (e) { throw new Error('這不是專案資料夾（找不到 index.html）。請選含有 index.html 的那一層。'); }
+    projDir = d; await writeLogo();
+  } catch (e) { if (e.name !== 'AbortError') { alert('放進專案失敗：' + e.message); } }
+};
+$('bLogo').onclick = () => { thLogoShow(); if ($('thLogoNote').textContent === '') { $('thLogoNote').textContent = '先按「1. 選擇圖片」選一張 PNG，再按「2. 生成LOGO資料」，選含有 index.html 的資料夾，就會產生 logo_data.js 放進專案。'; } $('lg').style.display = 'flex'; };
+$('lgOk').onclick = () => { $('lg').style.display = 'none'; };
+function openTheme() { fillThemeForm(); $('th').style.display = 'flex'; }
+function closeTheme() { $('th').style.display = 'none'; }
+$('bTheme').onclick = openTheme;
+$('thOk').onclick = closeTheme;
+$('thReset').onclick = () => { loadTheme(null); touch(); fillThemeForm(); };
+$('thTitle').oninput = () => { theme.title = $('thTitle').value; touch(); drawThemePreview(); };
+$('thSub').oninput = () => { theme.subtitle = $('thSub').value; touch(); drawThemePreview(); };
+$('thFontSel').onchange = () => {
+  const v = $('thFontSel').value;
+  if (v === 'custom') { $('thFont').style.display = 'inline-block'; theme.font = $('thFont').value; $('thFont').focus(); }
+  else { $('thFont').style.display = 'none'; theme.font = FONT_PRESETS[+v][0]; }
+  touch(); drawThemePreview();
+};
+$('thFont').oninput = () => { theme.font = $('thFont').value; touch(); drawThemePreview(); };
+[['thTitleC', 'titleColor'], ['thSubC', 'subtitleColor'], ['thPrimary', 'primary'], ['thSecondary', 'secondary']].forEach(([id, key]) => { $(id).oninput = () => { theme[key] = $(id).value; touch(); drawThemePreview(); }; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('th').style.display === 'flex') { closeTheme(); } });
+
+// ---------- 島編輯模式：滾輪縮放（以滑鼠位置為中心）、拖動空白處平移、重設視圖 ----------
+const EM_HOME = { x: -125, y: -147, w: 690, h: 690 }; // 預設視圖：整張平面圖（跟 emSvg 的 viewBox 一致）
+let emView = Object.assign({}, EM_HOME), emPan = null;
+function applyEmView() { $('emSvg').setAttribute('viewBox', emView.x + ' ' + emView.y + ' ' + emView.w + ' ' + emView.h); }
+$('emSvg').addEventListener('wheel', ev => {
+  ev.preventDefault();
+  const svg = $('emSvg'), p = svgPoint(svg, ev), k = ev.deltaY < 0 ? 0.85 : 1 / 0.85;
+  const nw = Math.max(60, Math.min(1200, emView.w * k)), f = nw / emView.w; // 最多放大約 11 倍、縮小約 1.7 倍
+  emView = { x: p.x - (p.x - emView.x) * f, y: p.y - (p.y - emView.y) * f, w: nw, h: nw }; // 滑鼠指著的那一點不動
+  applyEmView();
+}, { passive: false });
+$('emSvg').addEventListener('mousedown', ev => { if (ev.button === 1) { ev.preventDefault(); } }); // 擋掉瀏覽器中鍵的自動捲動圖示
+$('emSvg').addEventListener('auxclick', ev => { if (ev.button === 1) { ev.preventDefault(); } });
+$('emSvg').addEventListener('pointerdown', ev => { // 中鍵：在任何地方都能拖動畫布；左鍵：只有按在空白處才拖（按在島或人物上是選取／拖動）
+  const mid = ev.button === 1;
+  if (mid === false && (ev.button !== 0 || ev.target.closest('.nd, .cm') !== null)) { return; }
+  if (mid) { ev.preventDefault(); }
+  const ctm = $('emSvg').getScreenCTM();
+  emPan = { cx: ev.clientX, cy: ev.clientY, x: emView.x, y: emView.y, s: ctm.a }; // s：每個圖面單位對應的螢幕像素
+  try { $('emSvg').setPointerCapture(ev.pointerId); } catch (e) { /* 沒有可捕捉的指標時略過 */ }
+  $('emSvg').style.cursor = 'grabbing';
+});
+$('emSvg').addEventListener('pointermove', ev => {
+  if (emPan === null) { return; }
+  emView.x = emPan.x - (ev.clientX - emPan.cx) / emPan.s; emView.y = emPan.y - (ev.clientY - emPan.cy) / emPan.s; applyEmView();
+});
+$('emSvg').addEventListener('pointerup', () => { emPan = null; $('emSvg').style.cursor = 'grab'; });
+$('emFit').onclick = () => { emView = Object.assign({}, EM_HOME); applyEmView(); };
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') { return; } if (cnRow >= 0) { closeCn(); } else if (emOn) { closeEm(); } });
+$('bOpen').onclick = () => window.open('index.html?live=1', 'islandlive:' + buildJs()); // 用「目前編輯中」的內容開（不用先存檔），內容放在視窗名稱傳給 index.html
+
+// ---------- 手動載入建築 js：預覽、匯入到專案（格式同 shapes\*.js）----------
+// <analyze-start>
+const BAD_TOKENS = [
+  [/\beval\s*\(/, 'eval'], [/new\s+Function\b/, 'new Function'], [/\bfetch\s*\(/, 'fetch（網路）'], [/XMLHttpRequest/, 'XMLHttpRequest（網路）'],
+  [/WebSocket/, 'WebSocket（網路）'], [/\bimport\s*\(/, '動態 import'], [/\bimportScripts\b/, 'importScripts'], [/document\.write/, 'document.write'],
+  [/localStorage|sessionStorage|indexedDB/, '瀏覽器儲存'], [/<script/i, '<script 標籤'], [/window\.(open|top|parent|location)\b/, 'window.open / top / parent / location'],
+  [/document\.(?!createElement\(\s*['"]canvas['"]\s*\))/, '使用 document（只允許 document.createElement("canvas")）']
+];
+function stripComments(s) { return s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/[^\n]*/g, '$1'); }
+// 檢查一支建築檔案：回傳 { errs（有就不能匯入）, warns, name, label, desc, shape }
+function analyzeShape(code) {
+  const errs = [], warns = [], out = { errs, warns, kind: '', name: '', label: '', desc: '', shape: null };
+  if (code.length > 100000) { errs.push('檔案超過 100KB'); } else if (code.length > 30000) { warns.push('檔案超過 30KB，建議精簡'); }
+  const bare = stripComments(code);
+  BAD_TOKENS.forEach(([re, label]) => { if (re.test(bare)) { errs.push('不允許使用：' + label); } });
+  if (/^\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/|\s)*\(\s*function\s*\(\s*\)\s*\{/.test(code) === false) { warns.push('建議整支包在 (function () { … })(); 裡，避免汙染全域'); }
+  if (/['"]use strict['"]/.test(code) === false) { warns.push("建議加上 'use strict';"); }
+  const w = {};
+  try { new Function('window', code)(w); } catch (e) { errs.push('載入時發生錯誤：' + e.message); return out; } // 只執行載入階段（登記），不畫 3D
+  const regS = w.ISLAND_SHAPES || {}, regC = w.ISLAND_CHARACTERS || {};
+  const names = Object.keys(regS).map(k => ['shape', k]).concat(Object.keys(regC).map(k => ['character', k]));
+  if (names.length === 0) { errs.push('找不到登記：建築要登記 ISLAND_SHAPES.名稱 = { label, build(color, ctx) {…} }；人物要登記 ISLAND_CHARACTERS.名稱 = { label, build(ctx) {…} }'); return out; }
+  if (names.length > 1) { errs.push('一個檔案只能登記一種（目前登記了 ' + names.map(n => n[1]).join('、') + '）'); return out; }
+  const kind = names[0][0], name = names[0][1], s = (kind === 'shape' ? regS : regC)[name];
+  out.kind = kind; out.name = name; out.shape = s;
+  if (/^[a-z][a-z0-9_]*$/.test(name) === false) { errs.push('shape 名稱「' + name + '」只能用小寫英文、數字、底線，且要英文開頭'); }
+  if (typeof s.build !== 'function') { errs.push(kind === 'shape' ? '缺少 build(color, ctx) 函式' : '缺少 build(ctx) 函式'); }
+  if (typeof s.label !== 'string' || s.label.trim() === '') { errs.push('缺少 label（中文名稱，顯示在維護工具的選單）'); } else { out.label = s.label; }
+  if (typeof s.desc !== 'string' || s.desc.trim() === '') { warns.push('建議加上 desc（一句話說明）'); } else { out.desc = s.desc; }
+  if (kind === 'shape' && s.themed !== undefined && typeof s.themed !== 'boolean') { warns.push('themed 應該是 true 或 false'); }
+  return out;
+}
+// <analyze-end>
+let impQ = []; // 等待匯入的檔案：{ fileName, code, a（analyzeShape 的結果）, overwrite }
+async function readShapeFile(f) { const code = await f.text(); return { fileName: f.name, code, a: analyzeShape(code), overwrite: false }; }
+function dataUrlOf(code) { return 'data:text/javascript;charset=utf-8;base64,' + btoa(unescape(encodeURIComponent(code))); }
+function existsOf(a) { return a.name !== '' && (a.kind === 'character' ? CHAR_LABEL : SHAPE_LABEL)[a.name] !== undefined; }
+function setCustom(q) { custom = { fileName: q.fileName, code: q.code, kind: q.a.kind, name: q.a.name, label: q.a.label, desc: q.a.desc, dataUrl: dataUrlOf(q.code) }; showCustom(); updatePreview(); }
+
+// 預覽：載入一支檔案，右側預覽區改畫它（不加進專案）
+$('bModel').onclick = () => $('modelIn').click();
+function showCustom() {
+  $('csBox').style.display = custom === null ? 'none' : 'block';
+  if (custom !== null) { $('csInfo').innerHTML = '檔案：' + esc(custom.fileName) + '<br>登記的 shape：<b>' + esc(custom.name) + '</b>（' + esc(custom.label) + '）' + (custom.desc ? '<br>' + esc(custom.desc) : ''); }
+}
+$('modelIn').onchange = async (ev) => {
+  const f = ev.target.files[0]; ev.target.value = ''; if (f === undefined) { return; }
+  const q = await readShapeFile(f);
+  if (q.a.errs.length > 0) { alert('這個檔案不能預覽：\n· ' + q.a.errs.join('\n· ')); return; }
+  setCustom(q);
+};
+$('csAgain').onclick = () => { pvKey = ''; updatePreview(); };
+$('csClear').onclick = () => { custom = null; pvKey = ''; showCustom(); updatePreview(); };
+$('csImport').onclick = () => { // 把目前預覽的這支加進匯入清單
+  if (custom === null) { return; }
+  if (impQ.some(q => q.fileName === custom.fileName && q.code === custom.code) === false) { const a = analyzeShape(custom.code); impQ.push({ fileName: custom.fileName, code: custom.code, a, overwrite: false }); }
+  openImp();
+};
+
+// 匯入：選檔（可多選）→ 檢查 → 寫進專案的 shapes\ 並更新 manifest.js
+$('bImport').onclick = () => $('impIn').click();
+$('impIn').onchange = async (ev) => {
+  const fs = [...ev.target.files]; ev.target.value = '';
+  for (const f of fs) { const q = await readShapeFile(f); impQ = impQ.filter(x => x.fileName !== q.fileName); impQ.push(q); }
+  openImp();
+};
+function openImp() { $('impMsg').innerHTML = ''; $('imp').style.display = 'flex'; drawImp(); }
+function closeImp() { $('imp').style.display = 'none'; }
+function drawImp() {
+  const box = $('impList');
+  if (impQ.length === 0) { box.innerHTML = '<p class="sub">還沒有檔案，按「加入檔案…」。</p>'; return; }
+  let h = '<table class="imptb"><thead><tr><th>檔案</th><th>建築</th><th>檢查結果</th><th></th></tr></thead><tbody>';
+  impQ.forEach((q, i) => {
+    const a = q.a, exists = existsOf(a);
+    h += '<tr><td>' + esc(q.fileName) + '</td><td>' + (a.name ? '<small>' + (a.kind === 'character' ? '島上人物' : '建築') + '</small><br><b>' + esc(a.name) + '</b><br>' + esc(a.label) + '<br><small>' + esc(a.desc) + '</small>' : '—') + '</td><td>'
+      + a.errs.map(e => '<div class="e">✗ ' + esc(e) + '</div>').join('') + a.warns.map(w => '<div class="w">！' + esc(w) + '</div>').join('')
+      + (a.errs.length === 0 ? '<div class="o">✓ 格式通過</div>' : '')
+      + (exists && a.errs.length === 0 ? '<div class="w">專案裡已經有「' + esc(a.name) + '」</div><label><input type="checkbox" data-ov="' + i + '"' + (q.overwrite ? ' checked' : '') + '> 覆蓋它</label>' : '')
+      + '</td><td class="acts"><button class="sm" data-pv="' + i + '"' + (a.errs.length ? ' disabled' : '') + '>預覽</button> <button class="sm" data-rm="' + i + '">移除</button></td></tr>';
+  });
+  box.innerHTML = h + '</tbody></table>';
+  box.querySelectorAll('[data-pv]').forEach(b => { b.onclick = () => { setCustom(impQ[+b.dataset.pv]); closeImp(); }; });
+  box.querySelectorAll('[data-rm]').forEach(b => { b.onclick = () => { impQ.splice(+b.dataset.rm, 1); drawImp(); }; });
+  box.querySelectorAll('[data-ov]').forEach(c => { c.onchange = () => { impQ[+c.dataset.ov].overwrite = c.checked; }; });
+}
+$('impAdd').onclick = () => $('impIn').click();
+$('impClose').onclick = closeImp;
+$('impGo').onclick = async () => {
+  const ok = impQ.filter(q => q.a.errs.length === 0 && (existsOf(q.a) === false || q.overwrite === true));
+  if (ok.length === 0) { $('impMsg').innerHTML = '<div class="e">✗ 沒有可以匯入的檔案：有錯誤的不能匯入；專案已有同名建築的要勾選「覆蓋它」。</div>'; return; }
+  if (window.showDirectoryPicker === undefined) { $('impMsg').innerHTML = '<div class="e">✗ 這個瀏覽器不支援直接寫入資料夾，請改用 Edge 或 Chrome。</div>'; return; }
+  try {
+    const dir = await showDirectoryPicker({ mode: 'readwrite' });
+    let mh; try { mh = await dir.getFileHandle('manifest.js'); } catch (e) { throw new Error('這不是專案資料夾（找不到 manifest.js）。請選含有 index.html 與 manifest.js 的那一層。'); }
+    let mtext = await (await mh.getFile()).text();
+    const done = [];
+    for (const q of ok) {
+      const dn = q.a.kind === 'character' ? 'characters' : 'shapes', entry = "'" + dn + "/" + q.a.name + ".js'";
+      if (mtext.includes(entry) === false) { // 加在 manifest.js 的 shapes 清單最後一項後面
+        const re = new RegExp("^([ \\t]*)'" + dn + "/[^']+\\.js',?[ \\t]*$", 'gm'); let last = null, m;
+        while ((m = re.exec(mtext)) !== null) { last = m; }
+        if (last !== null) {
+          const end = last.index + last[0].length, comma = last[0].trimEnd().endsWith(',') ? '' : ',';
+          mtext = mtext.slice(0, end) + comma + '\n' + last[1] + entry + ',' + mtext.slice(end);
+        } else { // 這個資料夾在 manifest.js 還沒有項目：加在 js/island.js 前面
+          const im = /^([ \t]*)'js\/island\.js'/m.exec(mtext);
+          if (im === null) { throw new Error('manifest.js 裡找不到 ' + dn + '/ 的清單，也找不到 js/island.js，無法加入（請確認是正確的專案資料夾）'); }
+          mtext = mtext.slice(0, im.index) + im[1] + entry + ',\n' + mtext.slice(im.index);
+        }
+      }
+      const sdir = await dir.getDirectoryHandle(dn, { create: true });
+      const fh = await sdir.getFileHandle(q.a.name + '.js', { create: true });
+      const w = await fh.createWritable(); await w.write(q.code); await w.close();
+      done.push(q);
+    }
+    const mw = await mh.createWritable(); await mw.write(mtext); await mw.close();
+    done.forEach(q => { // 工具內的 shape 選單立刻更新
+      const isC = q.a.kind === 'character', list = isC ? CHARS : SHAPES, labels = isC ? CHAR_LABEL : SHAPE_LABEL;
+      const row = [q.a.name, q.a.label, q.a.desc], k = list.findIndex(x => x[0] === q.a.name);
+      if (k >= 0) { list[k] = row; } else { list.push(row); }
+      labels[q.a.name] = q.a.label;
+    });
+    impQ = impQ.filter(q => done.includes(q) === false);
+    pvKey = ''; render(); drawImp();
+    $('impMsg').innerHTML = '<div class="o">✓ 已匯入 ' + done.length + ' 個（' + done.map(q => esc(q.a.name)).join('、') + '）：建築寫進所選資料夾的 shapes\\、人物寫進 characters\\，並加進 manifest.js。重新整理 index.html 就會生效；建築在 shape 選單選用，人物在島編輯模式的「島上人物」新增。若要發布，這個資料夾要再複製到 ISLAND。</div>';
+  } catch (e) { if (e.name !== 'AbortError') { $('impMsg').innerHTML = '<div class="e">✗ 匯入失敗：' + esc(e.message) + '</div>'; } }
+};
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('imp').style.display === 'flex') { closeImp(); } });
+addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+if (rows.length === 0) { $('msg').innerHTML = '<div class="w">！讀不到 islands_data.js，可以用「載入檔案…」選一份，或直接「＋ 新增一座島」。</div>'; }
+render();
+</script>
+</body>
+</html>

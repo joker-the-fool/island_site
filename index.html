@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>福華名品</title>
+<style>
+  /* 福華風格：品牌紅 + 白底 + 細灰線 + 方正無圓角 */
+  :root { --panel:#fff; --ink:#222; --sub:#777; --accent:#af272f; --accent-dk:#8e1f26; --on-accent:#fff; --accent2:#af272f; --line:#ddd; --soft:#f7f7f7; --bar:26px; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; font-family:"Noto Sans CJK TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; color:var(--ink); }
+  #scene { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  #topbar { position:fixed; left:0; right:0; top:0; height:var(--bar); background:var(--accent); color:var(--on-accent); z-index:5;
+            display:flex; align-items:center; justify-content:flex-end; padding:0 20px; font-size:11px; letter-spacing:1.5px; }
+  #title { position:fixed; left:0; top:var(--bar); pointer-events:none; background:#fff; padding:14px 34px 14px 24px;
+           box-shadow:0 2px 10px #0000001a; }
+  #title h1 { margin:0; font-size:26px; font-weight:500; color:var(--ink); letter-spacing:4px; }
+  #title h1::after { content:""; display:block; width:36px; height:3px; background:#ccc; margin-top:8px; }
+  #title p { margin:10px 0 0; font-size:12px; color:#777; letter-spacing:2px; }
+  /* joker 原：#reset { position:fixed; right:20px; bottom:14px; border:1px solid var(--accent); */
+  #reset { position:fixed; right:8px; top:calc(var(--bar) + 13px); border:1px solid var(--accent); /* joker 改放右上角（頁面已無右側面板，貼右邊） */ background:var(--accent); color:var(--on-accent); border-radius:0;
+           padding:8px 18px; cursor:pointer; font-size:13px; font-family:inherit; letter-spacing:1px; }
+  #reset:hover { background:var(--accent-dk); }
+  /* 縮放條：「全部小島」按鈕下面的垂直滑桿，作用跟滑鼠滾輪一樣（上方＝拉近、下方＝拉遠） */
+  #zoombar { position:fixed; right:8px; top:calc(var(--bar) + 60px); width:93px; display:flex; flex-direction:column; align-items:center; gap:6px; user-select:none; }
+  #zoombar button { width:30px; height:30px; padding:0; border:1px solid var(--accent2); background:#ffffffe6; color:var(--accent2); font-size:18px; line-height:1; cursor:pointer; border-radius:0; font-family:inherit; }
+  #zoombar button:hover { background:#fff; }
+  #ztrack { position:relative; width:30px; height:170px; cursor:pointer; touch-action:none; }
+  #ztrack::before { content:""; position:absolute; left:13px; top:0; bottom:0; width:4px; background:#ffffffcc; border:1px solid var(--accent); box-sizing:border-box; }
+  #zthumb { position:absolute; left:3px; width:24px; height:14px; background:var(--accent); border:2px solid #fff; box-sizing:border-box; box-shadow:0 1px 4px #0005; }
+  #panel { position:fixed; right:0; top:var(--bar); bottom:0; width:340px; background:var(--panel);
+           box-shadow:-2px 0 12px #0000001f; display:flex; flex-direction:column; }
+  #panel header { padding:24px 24px 16px; }
+  #panel header h2 { margin:0 0 14px; font-size:20px; font-weight:500; line-height:1.5; }
+  #panel header h2::after { content:""; display:block; width:36px; height:3px; background:#ccc; margin-top:10px; }
+  #panel header p { margin:0 0 12px; font-size:12px; color:var(--sub); line-height:1.6; }
+  #panel header .row { display:flex; gap:8px; }
+  #q { flex:1; padding:9px 12px; border:1px solid #ccc; border-radius:0; background:#fff; font-size:13px; font-family:inherit; outline:none; }
+  #q:focus { border-color:var(--accent); }
+  #panel header button { border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:0; padding:0 14px; cursor:pointer; font-size:12px; font-family:inherit; letter-spacing:1px; }
+  #panel header button:hover { background:var(--accent-dk); }
+  #list { overflow:auto; padding:0 24px 20px; flex:1; }
+  .item { display:flex; gap:14px; padding:16px 8px 16px 12px; border-top:1px solid var(--line); cursor:pointer; transition:background .15s; position:relative; }
+  .item:hover { background:var(--soft); }
+  .item.active { background:var(--soft); }
+  .item.active::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent); }
+  .item .no { font-family:Georgia,"Times New Roman",serif; font-size:22px; color:var(--accent); min-width:36px; }
+  .item .tx { flex:1; }
+  .item h3 { margin:0 0 4px; font-size:15px; font-weight:500; }
+  .item p { margin:0; font-size:12px; color:var(--sub); line-height:1.7; }
+  .item a { font-size:12px; color:#999; text-decoration:none; white-space:nowrap; align-self:flex-start; }
+  .item a:hover { color:var(--accent); }
+  #hint { position:fixed; left:20px; bottom:14px; font-size:12px; color:#555; background:#ffffffe6; padding:5px 14px; border-left:3px solid var(--accent); pointer-events:none; }
+  #err { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; padding:16px 20px; border:1px solid var(--accent); display:none; }
+  body.preview #topbar, body.preview #title, body.preview #reset, body.preview #zoombar { display:none; } /* 預覽模式（?preview=shape）：只留 3D 畫面，維護工具用 */
+  @media (max-width:700px) {
+    #panel { top:auto; width:100%; height:42%; }
+    #title { padding:8px 16px; }
+    #title h1 { font-size:20px; }
+    #title p { display:none; }
+    #hint { display:none; }
+  }
+</style>
+<script>
+// 維護工具按「開啟完整畫面」會用 ?live=1 開本頁，並把「目前編輯中的設定」放在視窗名稱（window.name）傳進來：
+// 有的話直接用它，不讀 islands_data.js，這樣不用先存檔就能看到結果；沒有就照常讀 islands_data.js
+(function () {
+  var pre = 'islandlive:';
+  if (/[?&]live=1/.test(location.search) && window.name.indexOf(pre) === 0) {
+    try { (0, eval)(window.name.slice(pre.length)); return; } catch (e) { /* 讀不進來就退回 islands_data.js */ }
+  }
+  document.write('<script src="islands_data.js"><\/script>');
+})();
+</script>
+<script src="logo_data.js" onerror="void 0"></script>
+<!-- three.js r160 + OrbitControls 的本機版（一般 script，雙擊開檔或離線都能用；產生方式見 vendor/README.txt） -->
+<script src="vendor/three_local.js"></script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="topbar"></div>
+<div id="title"><h1>福華名品</h1><p>真誠福華心，服務最用心</p></div>
+<button id="reset">全部小島</button>
+<div id="zoombar" title="縮放（跟滑鼠滾輪一樣）"><button id="zin" title="拉近">＋</button><div id="ztrack"><div id="zthumb"></div></div><button id="zout" title="拉遠">－</button></div>
+<!-- joker 移除左下角操作提示文字 <div id="hint">拖曳旋轉・右鍵移動・滾輪縮放・點小島飛過去</div> -->
+<div id="err"></div>
+
+<script>
+// 網頁外觀：islands_data.js 的 window.ISLAND_THEME（維護工具的「網頁外觀」設定）；沒有設定的項目就用原本的樣式
+//   title／subtitle：左上角主標題與副標題文字（留空就隱藏）；font：字型名稱（可用逗號列多個）；titleColor／subtitleColor：文字顏色
+//   primary：主配色（「全部小島」按鈕、縮放條、頂端橫條）；secondary：副配色（縮放條的＋－按鈕、島嶼標籤的編號徽章）
+(function () {
+  var T = window.ISLAND_THEME || {}, rs = document.documentElement.style;
+  function rgb(h) { var m = /^#([0-9a-f]{6})$/i.exec(h || ''); if (!m) { return null; } var n = parseInt(m[1], 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  function onColor(h) { var c = rgb(h); return (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) > 160 ? '#222' : '#fff'; } // 淺色底配深字、深色底配白字
+  function darker(h) { return '#' + rgb(h).map(function (v) { return ('0' + Math.round(v * 0.8).toString(16)).slice(-2); }).join(''); }
+  function fontCss(s) { return s.split(',').map(function (n) { return n.trim().replace(/["']/g, ''); }).filter(Boolean).map(function (n) { return /^(serif|sans-serif|monospace|cursive|system-ui)$/i.test(n) ? n : '"' + n + '"'; }).join(','); }
+  if (rgb(T.primary)) { rs.setProperty('--accent', T.primary); rs.setProperty('--accent-dk', darker(T.primary)); rs.setProperty('--on-accent', onColor(T.primary)); }
+  if (rgb(T.secondary)) { rs.setProperty('--accent2', T.secondary); }
+  var box = document.getElementById('title'), h1 = box.querySelector('h1'), p = box.querySelector('p');
+  if (typeof T.title === 'string') { h1.textContent = T.title; if (T.title !== '') { document.title = T.title; } }
+  if (typeof T.subtitle === 'string') { p.textContent = T.subtitle; }
+  if (rgb(T.titleColor)) { h1.style.color = T.titleColor; }
+  if (rgb(T.subtitleColor)) { p.style.color = T.subtitleColor; }
+  if (typeof T.font === 'string' && T.font.trim() !== '') { box.style.fontFamily = fontCss(T.font) + ',"Noto Sans CJK TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif'; }
+  if (h1.textContent === '') { h1.style.display = 'none'; }
+  if (p.textContent === '') { p.style.display = 'none'; }
+  if (h1.textContent === '' && p.textContent === '') { box.style.display = 'none'; }
+})();
+</script>
+<!-- 3D 程式拆成多個檔案，依 manifest.js 的順序載入（document.write 會依序同步載入，雙擊開檔、離線都能用） -->
+<script src="manifest.js"></script>
+<script>
+// 維護工具的「載入建築 js 預覽」會在網址加 ?shapejs=data:text/javascript;...：在所有建築之後、island.js 之前多載入那一支（只用在預覽）
+var extraShape = new URLSearchParams(location.search).get('shapejs');
+ISLAND_SCRIPTS.forEach(function (f) {
+  if (f === 'js/island.js' && extraShape && extraShape.indexOf('data:text/javascript') === 0) { document.write('<script src="' + extraShape + '"><\/script>'); }
+  document.write('<script src="' + f + '" onerror="var e=document.getElementById(\'err\');e.textContent=\'找不到檔案：' + f + '\';e.style.display=\'block\'"><\/script>');
+});
+</script>
+</body>
+</html>
