@@ -17,6 +17,7 @@ if (Array.isArray(window.ISLANDS) === false || window.ISLANDS.length === 0) {
 }
 // 預覽模式：網址帶 ?preview=建築類型&color=%23rrggbb 時只畫一座島（維護工具用來即時預覽 shape）
 const PV = new URLSearchParams(location.search), PREVIEW = PV.get('preview');
+const EDIT3D = PV.get('edit3d') === '1'; // 維護工具的「3D 編輯模式」：在 3D 畫面直接拖動島嶼位置（見 main.js 最後面）
 // 預覽模式也可以用 &scale=（倍率）帶入這座島的放大縮小
 let previewChars = []; // 預覽模式可以用 &characters=（JSON 陣列）帶入這座島上的人物，維護工具預覽時會用到
 try { previewChars = JSON.parse(PV.get('characters') || '[]'); } catch (e) { previewChars = []; }

@@ -98,6 +98,7 @@ const SLOTS = [[138, 88], [271, 113], [323, 261], [225, 325], [124, 273], [97, 1
       else if (sl) { const sh = SHIFT[i] || [0, 0]; pos = new THREE.Vector3((sl[0] - 220) * LK + sh[0], 0, (sl[1] - 198) * LK + sh[1]); }
       else { const a = placeRand() * Math.PI * 2; pos = new THREE.Vector3(Math.cos(a) * 34, 0, Math.sin(a) * 34); } // 超過 7 座時往外放
     }
+    if (i > 0 && typeof d.y === 'number') { pos.y = d.y; } // 資料裡可以指定島的高度 y（場景單位，主島固定在 0；跟主島齊平就是 0）
     grp.position.copy(pos);
     // 建築正面朝向中央商場（中央商場本身正面朝 +z，也就是總覽鏡頭的方向）
     const face = i === 0 ? 0 : Math.atan2(-pos.x, -pos.z);
@@ -113,12 +114,12 @@ const SLOTS = [[138, 88], [271, 113], [323, 261], [225, 325], [124, 273], [97, 1
     // 島上人物：islands_data.js 的 characters 欄位，每個 { type, x, y, z, ry }；位置相對於建築（+z 是建築正面，ry 是面向角度，單位度）
     const addChars = list => { // 回傳 { objs, fns }：建出來的人物與它們登記的每幀動作（預覽模式要整批換掉時用）
       const got = { objs: [], fns: [] };
-      (list || []).forEach(c => {
+      (list || []).forEach((c, k) => {
         const C = window.ISLAND_CHARACTERS[c.type];
         if (C === undefined) { console.warn('找不到島上人物：' + c.type); return; }
         try {
           const ch = C.build({ index: i, r, face, onUpdate: fn => { UPDATERS.push(fn); got.fns.push(fn); } });
-          ch.position.set(c.x || 0, c.y || 0, c.z || 0); ch.rotation.y = (c.ry || 0) * Math.PI / 180; main.add(ch); got.objs.push(ch);
+          ch.position.set(c.x || 0, c.y || 0, c.z || 0); ch.rotation.y = (c.ry || 0) * Math.PI / 180; ch.userData.charIdx = k; main.add(ch); got.objs.push(ch);
         } catch (e) { console.error(e); showFatal('島上人物「' + c.type + '」建造失敗：' + e.message); }
       });
       return got;
@@ -176,7 +177,7 @@ const SLOTS = [[138, 88], [271, 113], [323, 261], [225, 325], [124, 273], [97, 1
     grp.traverse(o => { if (o.isMesh && o !== foam) { hit.push(o); } });
     if (lb !== null) { hit.push(lb); }
     hit.forEach(m => { m.userData.idx = i; });
-    islands.push({ d, grp, pos, r: r * sc, phase: i * 1.3, hit, face, isle }); // r 記的是縮放後的實際半徑（橋、重疊、鏡頭都用它）
+    islands.push({ d, grp, pos, r: r * sc, phase: i * 1.3, hit, face, isle, main }); // r 記的是縮放後的實際半徑（橋、重疊、鏡頭都用它）
   });
   clickable = islands.flatMap(o => o.hit);
   // 總覽鏡頭依最遠的島調整距離（原本 8 座的配置最遠約 26，低於 32，所以鏡頭不變；島被拉得更遠時才會往後退）
@@ -185,25 +186,28 @@ const SLOTS = [[138, 88], [271, 113], [323, 261], [225, 325], [124, 273], [97, 1
 
 const EDGES = [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [6, 5], [2, 3], [4, 3], [0, 7], [2, 7]]; // 橋（舊格式資料沒有 bridges 欄位時用）
 // ---------- 木橋：中央連每座島，相鄰的島也互連 ----------
+const bridgeObjs = []; // 蓋出來的橋（3D 編輯模式拖動島嶼時要整批重蓋）
 function bridge(A, B) {
   const dir = new THREE.Vector3().subVectors(B.pos, A.pos).setY(0), len0 = dir.length(); dir.normalize();
   const p0 = A.pos.clone().addScaledVector(dir, A.r * 0.92), p1 = B.pos.clone().addScaledVector(dir, -B.r * 0.92);
   const len = p0.distanceTo(p1); if (len < 0.5) { return; }
   const g = new THREE.Group(); g.position.copy(p0); g.rotation.y = Math.atan2(-dir.z, dir.x);
+  const sl = new THREE.Group(); sl.rotation.z = Math.atan2(p1.y - p0.y, Math.hypot(p1.x - p0.x, p1.z - p0.z)); g.add(sl); // 兩端島高度不同：橋面沿斜線搭（len 是兩端的實際距離）
   const steps = Math.ceil(len / 0.42);
   for (let s = 0; s <= steps; s++) {
     const u = s / steps, p = mk(new THREE.BoxGeometry(0.34, 0.08, 1.2), s % 2 ? 0xb98a56 : 0xc89a64, u * len, 0.45 - Math.sin(u * Math.PI) * -0.12, 0);
-    g.add(p);
+    sl.add(p);
   }
   for (const z of [-0.62, 0.62]) {
-    const rail = mk(new THREE.BoxGeometry(len, 0.05, 0.05), 0x7a5a3a, len / 2, 0.95, z); g.add(rail);
-    for (const u of [0, 0.5, 1]) { g.add(mk(new THREE.BoxGeometry(0.08, 0.6, 0.08), 0x7a5a3a, u * len, 0.7, z)); }
+    const rail = mk(new THREE.BoxGeometry(len, 0.05, 0.05), 0x7a5a3a, len / 2, 0.95, z); sl.add(rail);
+    for (const u of [0, 0.5, 1]) { sl.add(mk(new THREE.BoxGeometry(0.08, 0.6, 0.08), 0x7a5a3a, u * len, 0.7, z)); }
   }
-  scene.add(g);
+  scene.add(g); bridgeObjs.push(g);
   // 小人走動用的路線：A 島內 → 橋頭 → 橋尾 → B 島內
   bridges.push({ pts: [A.pos.clone().addScaledVector(dir, A.r * 0.35), p0, p1, B.pos.clone().addScaledVector(dir, -B.r * 0.35)] });
 }
 // 橋的連法：islands_data.js 每座島的 bridges 欄位（填相連島的 id）決定；整份資料都沒有 bridges 欄位時，沿用上面寫死的 EDGES（舊格式）
+function buildBridges() {
 if (data.some(d => Array.isArray(d.bridges))) {
   const idIdx = new Map(data.map((d, i) => [d.id, i])), seen = new Set();
   data.forEach((d, i) => {
@@ -218,4 +222,10 @@ if (data.some(d => Array.isArray(d.bridges))) {
   EDGES.forEach(([a, b]) => { if (a < N && b < N) { bridge(islands[a], islands[b]); } });
   for (let i = 8; i < N; i++) { bridge(islands[0], islands[i]); } // 多出來的島直接連中央
 }
+}
+buildBridges();
+window.__rebuildBridges = function () { // 島的位置變了：把舊橋拿掉、依新位置重蓋
+  bridgeObjs.forEach(g => { scene.remove(g); g.traverse(n => { if (n.geometry) { n.geometry.dispose(); } }); });
+  bridgeObjs.length = 0; bridges.length = 0; buildBridges();
+};
 

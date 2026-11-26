@@ -2,7 +2,7 @@
 // id      ：英文代號，網址帶 #id 可直接飛到該島（例如 index.html#cinema）
 // title   ：島上標籤顯示的名稱
 // desc    ：說明文字（目前畫面沒用到，先保留）
-// link    ：跳轉頁面（目前畫面沒用到，先保留）
+// link    ：跳轉頁面（先點島飛過去，再點一下已聚焦的島就跳轉；沒填就不跳）
 // color   ：島的主題色
 // shape   ：島上的建築，必須是 index.html 的 mainBuilding() 有的類型：
 //           mall 商場 / reception 服務台 / toy 玩具店 / server 伺服器機櫃 / pavilion 涼亭 /
@@ -10,13 +10,14 @@
 // x, z    ：島中心在平面圖上的位置（場景單位；中央主島固定在 0, 0，x 往右、z 往下，一座島的半徑約 5）；沒填就用內建的預設位置
 // bridges ：用木橋相連的島（填對方的 id；兩邊都列，互相對稱，只會蓋一座橋）
 // characters：這座島上的人物，每個 { "type": 人物名稱, "x", "y", "z": 相對於建築的位置（+z 是建築正面）, "ry": 面向角度（度） }；人物種類見 characters*.js
+// y       ：選填；這座島的高度（場景單位，預設 0＝跟中央主島齊平；橋會跟著斜搭）
 // scale   ：這座島整體的放大縮小倍率（選填，預設 1；島、建築、樹、人物一起縮放）
 // seed    ：選填；島形與植物散布的亂數種子。沒填就依這座島在清單裡的順序自動算（調整順序外形會變）；填了就固定，不受順序影響
 // title 留空：不顯示這座島的標籤（編號與名稱都不顯示；副島預設這樣）
 // 檔案最後的 window.ISLAND_THEME：網頁外觀（維護工具的「網頁外觀」設定）。title／subtitle 左上角標題與副標題文字（留空就隱藏）、font 字型（空白＝預設；顯示網頁的機器要有安裝這個字型才會生效）、titleColor／subtitleColor 文字顏色、primary 主配色（「全部小島」按鈕、縮放條、頂端橫條）、secondary 副配色（縮放條的＋－按鈕、島嶼標籤的編號徽章）
 // 順序即編號：第 1 個是中央主島，其餘依序放在四周
 window.ISLANDS = [
-  { "id": "mall", "title": "福華大飯店", "desc": "", "link": "pages/data.html", "color": "#c4503a", "shape": "mall", "x": 0, "z": 0, "bridges": ["service", "leisure", "professional", "excellence", "entertainment", "prestige", "trend"], "characters": [] },
+  { "id": "mall", "title": "福華大飯店", "desc": "", "link": "", "color": "#c4503a", "shape": "mall", "x": 0, "z": 0, "bridges": ["service", "leisure", "professional", "excellence", "entertainment", "prestige", "trend"], "characters": [] },
   { "id": "service", "title": "服務", "desc": "", "link": "", "color": "#6f9bc4", "shape": "reception", "x": -11.9, "z": -15.9, "bridges": ["mall"], "characters": [] },
   { "id": "leisure", "title": "休閒", "desc": "", "link": "", "color": "#e0a040", "shape": "toy", "x": 17.8, "z": -8.8, "bridges": ["mall", "professional", "trend"], "characters": [] },
   { "id": "professional", "title": "專業", "desc": "", "link": "", "color": "#7a9f5a", "shape": "server", "x": 14.9, "z": 9.1, "bridges": ["mall", "leisure", "excellence", "isle_nature1", "isle_nature2"], "characters": [{"type":"serverman", "x":-0.9, "y":0.1, "z":1.9, "ry":0}] },
